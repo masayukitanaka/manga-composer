@@ -6,6 +6,8 @@ manga panel layouts. Write a `.manga` file and compile it to **SVG** or **PNG**.
 manga-composer is a TypeScript port of the Python `manga-gen` library. It ships
 as a CLI and as a programmatic library.
 
+Repository: <https://github.com/masayukitanaka/manga-composer>
+
 > 日本語版は [README_ja.md](README_ja.md) を参照してください。
 
 ## Features
@@ -29,20 +31,42 @@ as a CLI and as a programmatic library.
 
 ## Installation
 
+> **Note:** manga-composer is not published to the npm registry yet. Install it
+> directly from GitHub. (The package builds itself on install via a `prepare`
+> script, so no manual build step is needed.)
+
+Install the CLI globally:
+
 ```bash
-npm install -g manga-composer
+npm install -g github:masayukitanaka/manga-composer
 ```
 
-Or run it without a global install:
+Run it once without a global install:
 
 ```bash
-npx manga-composer input.manga -o output.svg
+npx github:masayukitanaka/manga-composer input.manga -o output.svg
 ```
 
-For use as a library in a project:
+Add it as a dependency of a project (for use as a library):
 
 ```bash
-npm install manga-composer
+npm install github:masayukitanaka/manga-composer
+```
+
+You can also pin a specific branch, tag, or commit:
+
+```bash
+npm install github:masayukitanaka/manga-composer#main
+```
+
+Or clone and link it for local development:
+
+```bash
+git clone https://github.com/masayukitanaka/manga-composer.git
+cd manga-composer
+npm install
+npm run build
+npm link            # makes the `manga-composer` command available globally
 ```
 
 ## Quick start
