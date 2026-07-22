@@ -32,6 +32,14 @@ CLI をグローバルにインストール:
 npm install -g github:masayukitanaka/manga-composer
 ```
 
+`github:` 形式が環境によって失敗する場合（一部の npm キャッシュは git インストールを
+うまく扱えないことがあります）、tarball の URL からインストールしてください。こちらが
+最も確実な方法です:
+
+```bash
+npm install -g https://github.com/masayukitanaka/manga-composer/archive/refs/heads/main.tar.gz
+```
+
 グローバルインストールせずに一度だけ実行:
 
 ```bash

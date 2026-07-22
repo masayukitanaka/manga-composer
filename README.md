@@ -41,6 +41,14 @@ Install the CLI globally:
 npm install -g github:masayukitanaka/manga-composer
 ```
 
+If the `github:` shorthand fails on your machine (some npm caches mishandle git
+installs), install from the tarball URL instead — this is the most reliable
+form:
+
+```bash
+npm install -g https://github.com/masayukitanaka/manga-composer/archive/refs/heads/main.tar.gz
+```
+
 Run it once without a global install:
 
 ```bash
