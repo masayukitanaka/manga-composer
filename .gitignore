@@ -1,0 +1,7 @@
+manga-gen-python
+.DS_Store
+node_modules
+dist
+*.tsbuildinfo
+scripts/tmp
+.private

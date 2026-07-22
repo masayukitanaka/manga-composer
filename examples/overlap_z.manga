@@ -1,0 +1,39 @@
+// Overlap with z-order control (see .private/FRAME_OVERLAP.md)
+// Layout inspired by a large bleed panel covered by a smaller front panel.
+
+page {
+  gutter: 5
+  border: 1
+
+  row height: 30% {
+    panel top {
+      background: "#d8e8f8"
+    }
+  }
+
+  // Large panel: bleeds downward over the bottom row, but stays behind it
+  row height: 40% {
+    panel big_face {
+      offset_bottom: 60      // positive = expand (current implementation)
+      z_index: -2            // explicit z: behind everything
+      background: "#e8e0d8"
+    }
+  }
+
+  // Bottom row: drawn above big_face
+  row {
+    col width: 45% {
+      panel back_left {
+        importance: 3        // derived z = -1: above big_face, below front_right
+        offset_right: 10     // expand right, under front_right
+        background: "#d8f0d8"
+      }
+    }
+    col {
+      panel front_right {
+        importance: 1        // derived z = +1: frontmost
+        background: "#ffffff"
+      }
+    }
+  }
+}

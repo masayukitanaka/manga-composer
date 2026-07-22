@@ -1,0 +1,58 @@
+{
+  "name": "manga-composer",
+  "version": "0.1.0",
+  "description": "Manga panel layout DSL compiler — compiles .manga files to SVG/PNG",
+  "type": "module",
+  "bin": {
+    "manga-composer": "./bin/manga-composer.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "cli": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "compare": "tsx scripts/compare.ts",
+    "generate-references": "tsx scripts/generate-references.ts"
+  },
+  "keywords": [
+    "manga",
+    "comic",
+    "dsl",
+    "layout",
+    "svg",
+    "cli"
+  ],
+  "author": "Masayuki Tanaka",
+  "license": "MIT",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pngjs": "^6.0.5",
+    "fast-xml-parser": "^5.10.1",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.10"
+  }
+}

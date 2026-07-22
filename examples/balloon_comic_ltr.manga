@@ -1,0 +1,106 @@
+// American-comic-style speech balloon / caption example: left-to-right
+// page flow, horizontal text (both are the DSL defaults, set explicitly
+// here for clarity). anchor_pos: top_left is the natural balloon
+// placement for LTR reading order (mirrors balloon_basic.manga's
+// top_right, which suits RTL/manga reading order instead).
+// See .private/SPEECH.md for the design.
+
+page {
+  size: B5
+  direction: ltr
+  gutter: 6
+  border: 1.2
+
+  row height: 20% {
+    panel caption {
+      background: "#f5f5f0"
+      image: "assets/hometown.jpg"
+
+      monologue {
+        text: "Meanwhile, across town..."
+        text_direction: horizontal
+        background: "#000000"
+        text_color: "#ffffff"
+        margin: 20
+        x: 10
+        y: 10
+        width: 90
+        height: 28
+        z_index: 10
+        border: 0
+        align: center
+        font_size: 5
+      }
+    }
+  }
+
+  row {
+    col {
+      panel hero {
+        background: "#dddddd"
+        image: "assets/boy.jpg"
+
+        balloon {
+          anchor_pos: top_left
+          text: "Stop right there!"
+          text_direction: horizontal
+          tail_angle: 140
+          shape: shout
+          width: 50
+          height: 44
+          padding: 6
+          border: 0.3
+          align: center
+          y: 120
+        }
+      }
+    }
+    col {
+      panel villain {
+        background: "#eeeeee"
+
+        balloon {
+          anchor_pos: top_right
+          text: "You'll never catch me. How naive. I've already read every escape route you've got."
+          text_direction: horizontal
+          tail_angle: 220
+          shape: oval
+          width: 90
+          border: 0.3
+          align: center
+          aspect_ratio: 0.4
+          jitter: 0.2
+          y: 70
+        }
+
+        monologue thought1 {
+          anchor_pos: bottom_left
+          text: "...or so he thought."
+          text_direction: horizontal
+          border: 0
+          font_size: 4
+          align: center
+          x: 110
+        }
+      }
+    }
+  }
+
+  row height: 30% {
+    panel impact {
+      background: "#f0f0f0"
+
+      balloon {
+        anchor_pos: center
+        text: "BOOM!"
+        text_direction: horizontal
+        shape: explosion
+        width: 65
+        height: 65
+        font_size: 6
+        align: center
+        border: 0.4
+      }
+    }
+  }
+}

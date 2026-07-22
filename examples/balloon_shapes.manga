@@ -1,0 +1,123 @@
+// All balloon shape variants side by side: oval, shout, whisper,
+// jagged, explosion, thought, rounded_box. Each balloon is nested inside
+// its own panel. oval also demonstrates aspect_ratio; rounded_box
+// demonstrates corner_radius; explosion demonstrates a fused tail (curved
+// valleys vs. shout/jagged's all-straight zigzag).
+// See .private/SPEECH.md §2.5.1 for the shape design.
+
+page {
+  size: B5
+  gutter: 6
+  border: 1
+
+  row height: 50% {
+    col {
+      panel p_oval {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "縦長のセリフ"
+          text_direction: vertical
+          shape: oval
+          aspect_ratio: 2.0
+          tail_length: 2
+        }
+      }
+    }
+    col {
+      panel p_shout {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "叫び声だ！"
+          text_direction: vertical
+          shape: shout
+          height: 80
+          align: center
+        }
+      }
+    }
+    col {
+      panel p_whisper {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "小声で..."
+          text_direction: vertical
+          shape: whisper
+        }
+      }
+    }
+  }
+  row {
+    col {
+      panel p_jagged {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "機械音声です"
+          text_direction: vertical
+          shape: jagged
+          font_size: 6
+          height: 80
+          width: 32
+          align: center
+        }
+      }
+    }
+    col {
+      panel p_rounded {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "角丸ボックス"
+          text_direction: vertical
+          shape: rounded_box
+          corner_radius: 5
+        }
+      }
+    }
+    col {
+      panel p_thought {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "こう思った"
+          text_direction: vertical
+          shape: thought
+        }
+      }
+    }
+  }
+  row {
+    col {
+      panel p_explosion {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: top_right
+          text: "大爆発だ"
+          text_direction: vertical
+          shape: explosion
+          tail_angle: 220
+          align: center
+          height: 56
+          inner_ratio: 0.9
+        }
+      }
+    }
+    col {
+      panel p_explosion_wide {
+        background: "#f0f0f0"
+        balloon {
+          anchor_pos: center
+          text: "曲線の谷"
+          text_direction: vertical
+          shape: explosion
+          aspect_ratio: 0.7
+          height: 56
+          align: center
+        }
+      }
+    }
+  }
+}

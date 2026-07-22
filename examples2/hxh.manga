@@ -1,0 +1,71 @@
+// HUNTER×HUNTER風 1ページのコマ構成再現
+// 5段構成、右→左読み（RTL）
+
+page hxh_scene {
+  size: B5
+  direction: rtl
+  gutter: 4
+  padding: 12
+  background: "#ffffff"
+  border: 0.5
+
+  // 1段目：右に大きい酒盛りコマ、左は縦2分割
+  row height: 28% {
+    // 右側：レオリオの酒盛りシーン（大きめ）
+    col width: 58% {
+      panel drinking_party {
+        importance: 1
+        label: "酒盛り（レオリオ）"
+      }
+    }
+    // 左側：上下2分割
+    col {
+      row height: 58% {
+        panel gon_leorio_talk {
+          label: "ゴン＆レオリオ会話"
+        }
+      }
+      row {
+        panel mess_overhead {
+          label: "散乱物の俯瞰（無言）"
+        }
+      }
+    }
+  }
+
+  // 2段目：横長1コマ、4人での会話
+  row height: 18% {
+    panel four_talk {
+      importance: 2
+      label: "4人の会話（幻影旅団）"
+    }
+  }
+
+  // 3段目：3コマ横並び（右からゴン→灰皿（小）→レオリオ）
+  row height: 20% {
+    col width: 40% {
+      panel gon_explain {
+        label: "ゴン説明"
+      }
+    }
+    col width: 18% {
+      panel ashtray {
+        label: "灰皿アップ"
+      }
+    }
+    col {
+      panel leorio_nod {
+        label: "レオリオ相槌"
+      }
+    }
+  }
+
+  // 4段目：横長コマ、影の演出が強いラストコマ
+  row {
+    panel leorio_shadow {
+      importance: 1
+      background: "#e8e8e8"
+      label: "レオリオ（影のコマ）"
+    }
+  }
+}

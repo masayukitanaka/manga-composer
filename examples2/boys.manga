@@ -1,0 +1,67 @@
+// Layout study of examples2/boys_source.jpg (western comic, LTR)
+// 6 panels; the large bottom-left face panel is borderless, bleeds to the
+// page edges, covers the middle panel's lower-left corner, and is itself
+// covered by the bottom-right panel:  middle(z0) < big_face(z1) < bottom_right(z2)
+
+page {
+  size: A4
+  direction: ltr
+  gutter: 5
+  padding: 7
+  border: 1
+
+  // -- Row 1: three panels; the middle one is frameless floating art
+  row height: 35% {
+    col width: 26% {
+      panel top_left {
+        label: ""
+        offset_bottom: 16
+      }
+    }
+    col width: 40% {
+      panel top_mid {
+        border: 0          // frameless: art floats on the page background
+        label: ""
+      }
+    }
+    col {
+      panel top_right {
+        z_index: 1         // the middle panel tucks behind this one
+        offset_bottom: 4   // slightly taller than the other two, as in the source
+        label: ""
+      }
+    }
+  }
+
+  // -- Row 2: the tilted-head panel (indented from both sides)
+  row height: 23% {
+    col margin_left: 51, margin_right: 12 {
+      panel middle {
+        offset_top: 6      // nudge up to sit close under row 1
+        label: ""
+      }
+    }
+  }
+
+  // -- Row 3: big face (behind, frameless, full bleed) + bottom-right (front)
+  row {
+    col width: 60% {
+      panel big_face {
+        border: 0                // frameless (art bleeds, no frame in the source)
+        background: "#f2ece4"    // light tint so the panel extent reads in the study
+        offset_top: 44     // expand up over the middle panel's corner
+        offset_left: 7     // bleed to the left page edge
+        offset_bottom: 7   // bleed to the bottom page edge
+        offset_right: 20   // extend under the bottom-right panel
+        z_index: 1         // above `middle`, below `bottom_right`
+        label: ""
+      }
+    }
+    col {
+      panel bottom_right {
+        z_index: 2         // frontmost
+        label: ""
+      }
+    }
+  }
+}

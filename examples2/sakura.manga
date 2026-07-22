@@ -1,0 +1,51 @@
+// Manga Layout DSL for target_page
+page {
+  size: A4
+  direction: rtl
+  gutter: 5
+  padding_top: 20
+  padding_left: 10
+  padding_right: 10
+  padding_bottom: 25
+  border: 0.5
+  border_color: "#000000"
+
+  // 1
+  row height: 40% {
+    col width: 35%{
+      panel upper_right {
+        importance: 2
+        skew_left: 6
+      }
+    }
+    col {
+      panel upper_left {
+        importance: 2
+        offset_top: 20
+        border_top: 0
+      }
+    }
+  }
+
+  // 2
+  row height: 24% {
+    col margin_left: 50 {
+      panel middle {
+        importance: 1
+        offset_top: -30
+        skew_left: -16
+        border_right: 0
+      }
+    }
+  }
+
+  // 3
+  row {
+    col {
+      panel lower_right {
+        importance: 3
+        border_right: 0
+      }
+    }
+  }
+}

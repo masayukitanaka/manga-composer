@@ -1,0 +1,77 @@
+// Basic speech balloon example: balloon/monologue nested inside their
+// owning panel (a koma is a scene; its dialogue belongs to it).
+// The caption band uses monologue with a dark background/light text
+// (narration was merged into monologue — the distinction is a color
+// choice, not a separate element) and overlaps the panel border
+// (z_index puts it on top).
+// See .private/SPEECH.md for the design.
+
+page {
+  size: B5
+  gutter: 6
+  border: 1
+
+  row height: 55% {
+    panel scene {
+      background: "#e8e8e8"
+
+      monologue {
+        text: "そして、事件は起きた"
+        text_direction: vertical
+        background: "#000000"
+        text_color: "#ffffff"
+        x: 15
+        y: 15
+        width: 20
+        height: 80
+        z_index: 10
+        border: 0.2
+        align: center
+      }
+    }
+  }
+
+  row {
+    col {
+      panel char_a {
+        background: "#dddddd"
+
+        balloon {
+          anchor_pos: top_right
+          text: "おい、待てよ！"
+          text_direction: vertical
+          tail_angle: 230 // down-left, toward the speaker below
+          shape: shout
+          aspect_ratio: 3 // x3
+          border: 0.2
+          align: center
+          width: 30
+        }
+      }
+    }
+    col {
+      panel char_b {
+        background: "#eeeeee"
+
+        balloon {
+          anchor_pos: top_left
+          text: "何か用か"
+          text_direction: vertical
+          tail_angle: 120
+          shape: oval
+          border: 0.2
+          height: 40
+          align: center
+        }
+
+        monologue think1 {
+          anchor_pos: top_right
+          text: "厄介なことになったな"
+          text_direction: vertical
+          border: 0
+          align: center
+        }
+      }
+    }
+  }
+}

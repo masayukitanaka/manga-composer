@@ -1,0 +1,53 @@
+// 呪術廻戦風の見開きレイアウト
+// 巨大なアクションコマ + 下段の小コマ + 右側に縦長の人物コマ
+page jujutsu_spread {
+  size: 420x297
+  direction: rtl
+  gutter: 4
+  padding: 10
+  border: 0.5
+
+  // ページ全体を左右に分割
+  // 左側: 上にアクション大ゴマ + 下に小コマ3つ
+  // 右側: 縦長の人物コマ（敵キャラ）
+  row {
+    // 右列（広い方）
+    col width: 25% {
+      panel action { 
+        skew_left: 8
+        offset_bottom: -20
+        border_right: 0
+      }
+    }
+
+    // 左列
+    col {
+      row height: 72% {
+        skew_bottom: 8
+        panel action_car {
+          border_left: 0
+        }
+      }
+
+      // 下部: 小コマ3つ横並び
+      row {
+        col width: 35%, margin_left: 20 {
+          skew_top: 10
+          panel enemy_closeup_lower {
+
+          }
+        }
+        col width: 45% ,margin_right: 20{
+          panel itadori_face  {
+
+          }
+        }
+        col width: 20% {
+          panel megumi_face {
+            border_left: 0
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+// 少女漫画風 1ページのコマ構成再現
+// 右に大きな縦長キャラコマ、左側に小さめコマを積層
+// 下段は3コマ＋左下の小さな反応コマ
+// RTL（右→左読み）
+
+page shojo_scene {
+  size: B5
+  direction: rtl
+  gutter: 3
+  padding: 10
+  border: 0.5
+  background: "#ffffff"
+
+  // ========================
+  // 上半分：右に大コマ（Rui全身）、左に2つのコマ
+  // ========================
+  row height: 62% {
+
+    // 右側：縦長の大コマ（Rui立ち姿）
+    col width: 40% {
+      panel rui_full {
+        importance: 2
+        label: "Rui全身（大コマ）"
+        border: 0
+      }
+    }
+
+    // 左側：上下2分割
+    col {
+      skew_right: 8
+      // 上：男性アップ（驚き）。左辺を傾けて躍動感を出す
+      row height: 55% {
+        panel man_surprised {
+          importance: 1
+          label: "男性アップ（驚き）"
+          skew_bottom: -15
+        }
+      }
+      // 下：シルエット＆説明テキストのコマ（柔らかい雰囲気）
+      row {
+        panel silhouette_intro {
+          importance: 1
+          label: "シルエット2人＋説明"
+          background: "#fafafa"
+        }
+      }
+    }
+  }
+
+  // ========================
+  // キャプションスペース確保のための微小行（実装上は省略可）
+  // 実際は右下大コマから独立したボックスが重なる想定
+  // ========================
+
+  // ========================
+  // 下段：3コマ＋左下に小コマを差し込む構成
+  // ========================
+  row height: 38% {
+
+    // 右：カフェシーン（大きめ、モノローグ枠付き）
+    col width: 60% {
+      skew_left: -8
+      panel cafe_scene {
+        importance: 1
+        label: "カフェ：2人＋モノローグ"
+        border_bottom: 0
+        offset_bottom: 8 
+      }
+    }
+
+    // 左：上下2分割（上が大きく、下が小さい反応コマ）
+    col {
+      row height: 60% {
+        panel reaction_main {
+          label: "反応（メイン）"
+          background: "#f5f5f5"
+        }
+      }
+      row {
+        panel reaction_small {
+          label: "反応（小・はう?）"
+          offset_bottom: 8
+          border_bottom: 0
+        }
+      }
+    }
+  }
+}
