@@ -4,6 +4,7 @@ node_modules
 *.tsbuildinfo
 scripts/tmp
 .private
+.porting-python
 
 # dist/ is committed so `npm install github:...` works without a build step
 # (no prepare script). Source maps are not needed in git.
