@@ -1,7 +1,10 @@
 manga-gen-python
 .DS_Store
 node_modules
-dist
 *.tsbuildinfo
 scripts/tmp
 .private
+
+# dist/ is committed so `npm install github:...` works without a build step
+# (no prepare script). Source maps are not needed in git.
+dist/**/*.map
