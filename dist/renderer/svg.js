@@ -13,8 +13,6 @@
  * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
  * (docs/PORTING_NOTES.md).
  */
-import { readFileSync, existsSync } from "node:fs";
-import { extname, join } from "node:path";
 import { Rect, LayoutedSpeech } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import { renderBalloon } from "./balloonOutline.js";
@@ -73,12 +71,18 @@ export class SVGRenderer {
     page;
     panels;
     speeches;
-    source_dir;
-    constructor(page, panels, speeches = null, source_dir = null) {
+    imageLoader;
+    /**
+     * @param imageLoader resolves panel `image:` paths to base64 data. Pure/
+     *   browser-safe: the Node CLI passes a filesystem-backed loader
+     *   (createNodeImageLoader), a browser host passes its own. When `null`,
+     *   panels with images render a placeholder box.
+     */
+    constructor(page, panels, speeches = null, imageLoader = null) {
         this.page = page;
         this.panels = panels;
         this.speeches = speeches ?? [];
-        this.source_dir = source_dir ?? process.cwd();
+        this.imageLoader = imageLoader;
     }
     render() {
         const cfg = this.page.config;
@@ -678,8 +682,25 @@ export class SVGRenderer {
         const attrs = panel.attrs;
         if (!attrs.image)
             return;
-        const image_path = join(this.source_dir, attrs.image);
-        if (!existsSync(image_path)) {
+        let loaded = null;
+        try {
+            loaded = this.imageLoader ? this.imageLoader(attrs.image) : null;
+        }
+        catch (e) {
+            parent
+                .sub("text", {
+                x: s(r.x + r.w / 2),
+                y: s(r.y + r.h / 2),
+                "text-anchor": "middle",
+                "dominant-baseline": "middle",
+                "font-size": "3",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
+                fill: "#ff0000",
+            })
+                .setText(`Error: ${String(e)}`);
+            return;
+        }
+        if (loaded === null) {
             parent.sub("rect", {
                 x: s(r.x),
                 y: s(r.y),
@@ -701,46 +722,20 @@ export class SVGRenderer {
                 .setText(`Image not found: ${attrs.image}`);
             return;
         }
-        try {
-            const image_data = readFileSync(image_path);
-            const b64_data = image_data.toString("base64");
-            const ext = extname(image_path).toLowerCase();
-            const mime_types = {
-                ".png": "image/png",
-                ".jpg": "image/jpeg",
-                ".jpeg": "image/jpeg",
-                ".gif": "image/gif",
-                ".svg": "image/svg+xml",
-            };
-            const mime = mime_types[ext] ?? "image/png";
-            const aspect_ratio_map = {
-                cover: "xMidYMid slice",
-                contain: "xMidYMid meet",
-                fill: "none",
-            };
-            const aspect_ratio = aspect_ratio_map[attrs.imageFit] ?? "xMidYMid slice";
-            parent.sub("image", {
-                x: s(r.x),
-                y: s(r.y),
-                width: s(r.w),
-                height: s(r.h),
-                href: `data:${mime};base64,${b64_data}`,
-                preserveAspectRatio: aspect_ratio,
-            });
-        }
-        catch (e) {
-            parent
-                .sub("text", {
-                x: s(r.x + r.w / 2),
-                y: s(r.y + r.h / 2),
-                "text-anchor": "middle",
-                "dominant-baseline": "middle",
-                "font-size": "3",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#ff0000",
-            })
-                .setText(`Error: ${String(e)}`);
-        }
+        const aspect_ratio_map = {
+            cover: "xMidYMid slice",
+            contain: "xMidYMid meet",
+            fill: "none",
+        };
+        const aspect_ratio = aspect_ratio_map[attrs.imageFit] ?? "xMidYMid slice";
+        parent.sub("image", {
+            x: s(r.x),
+            y: s(r.y),
+            width: s(r.w),
+            height: s(r.h),
+            href: `data:${loaded.mime};base64,${loaded.dataBase64}`,
+            preserveAspectRatio: aspect_ratio,
+        });
     }
     _render_text(parent, panel) {
         const r = panel.rect;

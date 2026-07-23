@@ -7,21 +7,26 @@
  * always produces the same output). This is intentional — see
  * docs/PORTING_NOTES.md ("決定論的PRNGはCPythonのMersenne Twisterと非互換").
  *
- * Mirrors the Python side's _speech_seed (md5 of the resolved rect + shape,
- * truncated to 32 bits) and _SeededJitter (a .uniform(lo, hi) wrapper) so the
- * balloonOutline call sites port structurally unchanged.
+ * The seed is derived from the resolved rect + shape via a pure-JS 32-bit hash
+ * (FNV-1a). It used to use node:crypto MD5, but the jitter stream was already
+ * declared non-reference-compatible (above), so a Node-free hash costs nothing
+ * in fidelity and lets this module run in the browser (docs/SPEC.md §12 API-1).
+ * Same input → same seed, so a balloon's outline stays stable across renders.
  */
-import { createHash } from "node:crypto";
 /**
  * Deterministic integer seed for a balloon's outline jitter, derived from the
  * resolved rect and shape only (not text) so editing a balloon's text doesn't
- * change its outline. Truncated to 32 bits for the PRNG below.
+ * change its outline. 32-bit unsigned, feeds the PRNG below.
  */
 export function speechSeed(rect, shape) {
     const key = `${rect.x.toFixed(4)},${rect.y.toFixed(4)},${rect.w.toFixed(4)},${rect.h.toFixed(4)},${shape}`;
-    const digest = createHash("md5").update(key, "utf-8").digest("hex");
-    // First 8 hex chars → 32-bit unsigned int (matches int(digest[:8], 16)).
-    return parseInt(digest.slice(0, 8), 16) >>> 0;
+    // FNV-1a 32-bit.
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
 }
 /**
  * Small deterministic PRNG (mulberry32) — isolated from any global RNG state

@@ -7,15 +7,17 @@
  * always produces the same output). This is intentional — see
  * docs/PORTING_NOTES.md ("決定論的PRNGはCPythonのMersenne Twisterと非互換").
  *
- * Mirrors the Python side's _speech_seed (md5 of the resolved rect + shape,
- * truncated to 32 bits) and _SeededJitter (a .uniform(lo, hi) wrapper) so the
- * balloonOutline call sites port structurally unchanged.
+ * The seed is derived from the resolved rect + shape via a pure-JS 32-bit hash
+ * (FNV-1a). It used to use node:crypto MD5, but the jitter stream was already
+ * declared non-reference-compatible (above), so a Node-free hash costs nothing
+ * in fidelity and lets this module run in the browser (docs/SPEC.md §12 API-1).
+ * Same input → same seed, so a balloon's outline stays stable across renders.
  */
 import type { Rect } from "./layout/slicing.js";
 /**
  * Deterministic integer seed for a balloon's outline jitter, derived from the
  * resolved rect and shape only (not text) so editing a balloon's text doesn't
- * change its outline. Truncated to 32 bits for the PRNG below.
+ * change its outline. 32-bit unsigned, feeds the PRNG below.
  */
 export declare function speechSeed(rect: Rect, shape: string): number;
 /**

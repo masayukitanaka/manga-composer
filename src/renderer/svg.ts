@@ -14,12 +14,11 @@
  * (docs/PORTING_NOTES.md).
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { extname, join } from "node:path";
 import type { Page } from "../ast.js";
 import { Rect, LayoutedPanel, LayoutedSpeech } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import { renderBalloon } from "./balloonOutline.js";
+import type { ImageLoader } from "./imageLoader.js";
 
 const radians = (deg: number): number => (deg * Math.PI) / 180;
 
@@ -106,18 +105,24 @@ export class SVGRenderer {
   page: Page;
   panels: LayoutedPanel[];
   speeches: LayoutedSpeech[];
-  source_dir: string;
+  imageLoader: ImageLoader | null;
 
+  /**
+   * @param imageLoader resolves panel `image:` paths to base64 data. Pure/
+   *   browser-safe: the Node CLI passes a filesystem-backed loader
+   *   (createNodeImageLoader), a browser host passes its own. When `null`,
+   *   panels with images render a placeholder box.
+   */
   constructor(
     page: Page,
     panels: LayoutedPanel[],
     speeches: LayoutedSpeech[] | null = null,
-    source_dir: string | null = null,
+    imageLoader: ImageLoader | null = null,
   ) {
     this.page = page;
     this.panels = panels;
     this.speeches = speeches ?? [];
-    this.source_dir = source_dir ?? process.cwd();
+    this.imageLoader = imageLoader;
   }
 
   render(): string {
@@ -778,9 +783,25 @@ export class SVGRenderer {
     const attrs = panel.attrs;
     if (!attrs.image) return;
 
-    const image_path = join(this.source_dir, attrs.image);
+    let loaded = null;
+    try {
+      loaded = this.imageLoader ? this.imageLoader(attrs.image) : null;
+    } catch (e) {
+      parent
+        .sub("text", {
+          x: s(r.x + r.w / 2),
+          y: s(r.y + r.h / 2),
+          "text-anchor": "middle",
+          "dominant-baseline": "middle",
+          "font-size": "3",
+          "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
+          fill: "#ff0000",
+        })
+        .setText(`Error: ${String(e)}`);
+      return;
+    }
 
-    if (!existsSync(image_path)) {
+    if (loaded === null) {
       parent.sub("rect", {
         x: s(r.x),
         y: s(r.y),
@@ -803,46 +824,21 @@ export class SVGRenderer {
       return;
     }
 
-    try {
-      const image_data = readFileSync(image_path);
-      const b64_data = image_data.toString("base64");
-      const ext = extname(image_path).toLowerCase();
-      const mime_types: Record<string, string> = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-      };
-      const mime = mime_types[ext] ?? "image/png";
-      const aspect_ratio_map: Record<string, string> = {
-        cover: "xMidYMid slice",
-        contain: "xMidYMid meet",
-        fill: "none",
-      };
-      const aspect_ratio = aspect_ratio_map[attrs.imageFit] ?? "xMidYMid slice";
+    const aspect_ratio_map: Record<string, string> = {
+      cover: "xMidYMid slice",
+      contain: "xMidYMid meet",
+      fill: "none",
+    };
+    const aspect_ratio = aspect_ratio_map[attrs.imageFit] ?? "xMidYMid slice";
 
-      parent.sub("image", {
-        x: s(r.x),
-        y: s(r.y),
-        width: s(r.w),
-        height: s(r.h),
-        href: `data:${mime};base64,${b64_data}`,
-        preserveAspectRatio: aspect_ratio,
-      });
-    } catch (e) {
-      parent
-        .sub("text", {
-          x: s(r.x + r.w / 2),
-          y: s(r.y + r.h / 2),
-          "text-anchor": "middle",
-          "dominant-baseline": "middle",
-          "font-size": "3",
-          "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-          fill: "#ff0000",
-        })
-        .setText(`Error: ${String(e)}`);
-    }
+    parent.sub("image", {
+      x: s(r.x),
+      y: s(r.y),
+      width: s(r.w),
+      height: s(r.h),
+      href: `data:${loaded.mime};base64,${loaded.dataBase64}`,
+      preserveAspectRatio: aspect_ratio,
+    });
   }
 
   private _render_text(parent: XmlElement, panel: LayoutedPanel): void {

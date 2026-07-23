@@ -12,6 +12,7 @@ import { dirname, resolve, extname } from "node:path";
 import { parse } from "./parser.js";
 import { LayoutEngine } from "./layout/slicing.js";
 import { SVGRenderer } from "./renderer/svg.js";
+import { createNodeImageLoader } from "./renderer/nodeImageLoader.js";
 import { svgToPng } from "./renderer/raster.js";
 import { MangaDSLError } from "./errors.js";
 
@@ -60,7 +61,12 @@ program
       }
 
       process.stdout.write(`Rendering ${fmt.toUpperCase()}...\n`);
-      const renderer = new SVGRenderer(page, panels, speeches, dirname(sourcePath));
+      const renderer = new SVGRenderer(
+        page,
+        panels,
+        speeches,
+        createNodeImageLoader(dirname(sourcePath)),
+      );
       const svgStr = renderer.render();
 
       if (fmt === "svg") {

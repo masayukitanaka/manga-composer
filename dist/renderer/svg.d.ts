@@ -16,12 +16,19 @@
 import type { Page } from "../ast.js";
 import { Rect, LayoutedPanel, LayoutedSpeech } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
+import type { ImageLoader } from "./imageLoader.js";
 export declare class SVGRenderer {
     page: Page;
     panels: LayoutedPanel[];
     speeches: LayoutedSpeech[];
-    source_dir: string;
-    constructor(page: Page, panels: LayoutedPanel[], speeches?: LayoutedSpeech[] | null, source_dir?: string | null);
+    imageLoader: ImageLoader | null;
+    /**
+     * @param imageLoader resolves panel `image:` paths to base64 data. Pure/
+     *   browser-safe: the Node CLI passes a filesystem-backed loader
+     *   (createNodeImageLoader), a browser host passes its own. When `null`,
+     *   panels with images render a placeholder box.
+     */
+    constructor(page: Page, panels: LayoutedPanel[], speeches?: LayoutedSpeech[] | null, imageLoader?: ImageLoader | null);
     render(): string;
     private _render_panel;
     private _render_rect_panel;

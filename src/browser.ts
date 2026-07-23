@@ -1,26 +1,26 @@
 /**
- * Public library entry point for Node consumers (CLI, servers).
+ * Browser-safe entry point.
  *
- * Re-exports the pieces a consumer needs to go from .manga source to SVG/PNG
- * without shelling out to the CLI. This entry pulls in Node-only dependencies
- * (`node:fs` via the filesystem image loader, `@resvg/resvg-js` via svgToPng).
+ * Exposes the full parse → layout → SVG pipeline with NO Node-only imports:
+ * - no `node:fs` / `node:path` (image loading is dependency-injected)
+ * - no `@resvg/resvg-js` (PNG rasterization is Node-only; browsers use a WASM
+ *   rasterizer or a server round-trip instead — see docs/SPEC.md §6)
  *
- * For browser use, import from "manga-composer/browser", which exposes the same
- * pure pipeline (parse/layout/SVG) WITHOUT any Node-only imports.
+ * A browser host resolves panel images by passing its own ImageLoader to
+ * SVGRenderer (e.g. one backed by uploaded blobs). Omit it and image panels
+ * render a placeholder box.
  */
 
 import { parse } from "./parser.js";
 import { LayoutEngine } from "./layout/slicing.js";
 import { SVGRenderer } from "./renderer/svg.js";
-import { createNodeImageLoader } from "./renderer/nodeImageLoader.js";
+import type { ImageLoader } from "./renderer/imageLoader.js";
 
 export * from "./errors.js";
 export { parse } from "./parser.js";
 export { serialize } from "./serialize.js";
 export { LayoutEngine } from "./layout/slicing.js";
 export { SVGRenderer } from "./renderer/svg.js";
-export { svgToPng } from "./renderer/raster.js";
-export { createNodeImageLoader } from "./renderer/nodeImageLoader.js";
 export type { ImageLoader, LoadedImage } from "./renderer/imageLoader.js";
 export type {
   Page,
@@ -40,15 +40,16 @@ export type {
 export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
 
 /**
- * Compile .manga source to an SVG string.
+ * Compile .manga source to an SVG string, in the browser.
  * @param source .manga DSL source text
- * @param sourceDir directory the source lives in, for resolving image paths
+ * @param imageLoader optional resolver for panel `image:` paths. When omitted,
+ *   image panels render a placeholder box.
  */
-export function compileToSvg(source: string, sourceDir: string): string {
+export function compileToSvg(source: string, imageLoader: ImageLoader | null = null): string {
   const page = parse(source);
   const engine = new LayoutEngine(page);
   const panels = engine.layout();
   const speeches = engine.speeches;
-  const renderer = new SVGRenderer(page, panels, speeches, createNodeImageLoader(sourceDir));
+  const renderer = new SVGRenderer(page, panels, speeches, imageLoader);
   return renderer.render();
 }
