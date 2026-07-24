@@ -47,6 +47,8 @@ import {
   type TextDirection,
   type BalloonShape,
   type AnchorPos,
+  type FontStyle,
+  type FontWeight,
   defaultPageConfig,
   defaultPanelAttrs,
   defaultImageLayer,
@@ -66,7 +68,10 @@ import {
   ALIGNS,
   BALLOON_SHAPES,
   ANCHOR_POSITIONS,
+  FONT_STYLES,
+  FONT_WEIGHTS,
 } from "./ast.js";
+import { plainText } from "./renderer/richtext.js";
 
 // ── A parsed DSL value, before per-attribute coercion ───────────────────────
 // Mirrors what Lark's `value` rule yields to the transformer: either a raw
@@ -750,6 +755,33 @@ class Parser {
   }
 
   /**
+   * Parse a `line_height` value. A bare number or `%` is a multiplier of the
+   * font size (stored as unit "%": `1.4` → {1.4,"%"}, `140%` → {1.4,"%"}); an
+   * `mm` value is an absolute line advance. px/pt are rejected. Must be > 0.
+   */
+  private lineHeightLength(val: RawValue): Length {
+    let len: Length;
+    if (val.kind === "length") {
+      len = val.length; // NUMBER UNIT — only mm is meaningful here
+    } else {
+      const text = val.text;
+      if (text.endsWith("%")) {
+        len = { value: toFloat(text.replace(/%$/, "")) / 100, unit: "%" };
+      } else {
+        // bare number = multiplier
+        len = { value: toFloat(text), unit: "%" };
+      }
+    }
+    if (len.unit !== "%" && len.unit !== "mm") {
+      throw new ParseError(`line_height must be a number, % or mm (got ${JSON.stringify(len.unit)})`);
+    }
+    if (len.value <= 0) {
+      throw new ParseError(`line_height must be positive (got ${len.value})`);
+    }
+    return len;
+  }
+
+  /**
    * Fold the panel's `image:` sugar and/or an `images { ... }` block into the
    * normalized ImageLayer[]. Errors if both are given.
    */
@@ -922,10 +954,31 @@ class Parser {
     attrs: BalloonAttrs | MonologueAttrs,
     name: string,
     v: number | string,
+    val: RawValue,
   ): boolean {
     switch (name) {
       case "text":
+        // Validate inline markup up front so tag errors surface at parse time.
+        plainText(v as string);
         attrs.text = v as string;
+        return true;
+      case "font_family":
+        attrs.fontFamily = v as string;
+        return true;
+      case "line_height":
+        attrs.lineHeight = this.lineHeightLength(val);
+        return true;
+      case "letter_spacing":
+        attrs.letterSpacing = v as number;
+        return true;
+      case "font_style":
+        attrs.fontStyle = assertLiteral<FontStyle>(v as string, FONT_STYLES, "font_style");
+        return true;
+      case "font_weight":
+        attrs.fontWeight = assertLiteral<FontWeight>(v as string, FONT_WEIGHTS, "font_weight");
+        return true;
+      case "wrap":
+        attrs.wrap = toBool(v as string, "wrap");
         return true;
       case "text_direction":
         attrs.textDirection = assertLiteral<TextDirection>(
@@ -989,7 +1042,7 @@ class Parser {
     const attrs = defaultBalloonAttrs();
     for (const [name, val] of Object.entries(raw)) {
       const v = this.coerceScalar(name, val);
-      if (this.applySpeechShared(attrs, name, v)) continue;
+      if (this.applySpeechShared(attrs, name, v, val)) continue;
       switch (name) {
         case "shape":
           attrs.shape = assertLiteral<BalloonShape>(v as string, BALLOON_SHAPES, "shape");
@@ -1024,7 +1077,7 @@ class Parser {
     const attrs = defaultMonologueAttrs();
     for (const [name, val] of Object.entries(raw)) {
       const v = this.coerceScalar(name, val);
-      if (this.applySpeechShared(attrs, name, v)) continue;
+      if (this.applySpeechShared(attrs, name, v, val)) continue;
       switch (name) {
         case "text_color":
           attrs.textColor = v as string;

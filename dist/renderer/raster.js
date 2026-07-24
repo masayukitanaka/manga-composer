@@ -20,6 +20,7 @@ const MM_PER_INCH = 25.4;
  * @param opts.dpi DPI for mm→px scaling (default 300); ignored if outputWidth given
  * @param opts.outputWidth exact output width in px (for px-unit page sizes)
  * @param opts.widthMm the page width in mm — required to size the raster from dpi
+ * @param opts.font font resolution options forwarded to resvg (optional)
  */
 export function svgToPng(svgString, opts) {
     try {
@@ -32,7 +33,11 @@ export function svgToPng(svgString, opts) {
             const w_px = Math.round((opts.widthMm / MM_PER_INCH) * dpi);
             fitTo = { mode: "width", value: w_px };
         }
-        const resvg = new Resvg(svgString, { fitTo, background: "#ffffff" });
+        const resvg = new Resvg(svgString, {
+            fitTo,
+            background: "#ffffff",
+            ...(opts.font ? { font: opts.font } : {}),
+        });
         const rendered = resvg.render();
         return Buffer.from(rendered.asPng());
     }

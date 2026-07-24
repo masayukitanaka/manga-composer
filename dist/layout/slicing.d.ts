@@ -8,7 +8,7 @@
  * bug-fragile and any "cleanup" risks changing float rounding or branch order
  * in ways that surface as a subtly-misplaced corner in one example.
  */
-import { type Page, type PanelAttrs, type ImageLayer, type SpeechNode, type BalloonAttrs, type MonologueAttrs } from "../ast.js";
+import { type Page, type Length, type PanelAttrs, type ImageLayer, type SpeechNode, type BalloonAttrs, type MonologueAttrs } from "../ast.js";
 export declare class Rect {
     x: number;
     y: number;
@@ -93,8 +93,29 @@ export declare class LayoutedSpeech {
 export declare function resolveImageLayerRect(layer: ImageLayer, r: Rect): Rect;
 export declare const TEXT_CHAR_W_FACTOR = 1;
 export declare const TEXT_LINE_H_FACTOR = 1.4;
+/** True for glyphs that occupy a roughly full-width (square) cell. */
+export declare function isFullWidthChar(ch: string): boolean;
+/** Advance width (mm) of one character at the given font size + tracking. */
+export declare function charAdvance(ch: string, font_size: number, letter_spacing?: number): number;
+/** Total advance width (mm) of a string. */
+export declare function measureTextWidth(text: string, font_size: number, letter_spacing?: number): number;
+/**
+ * Count the lines that `text` wraps into at a fixed content width (mm). Mirrors
+ * the renderer's width-based wrapping (`_wrap_horizontal_styled`): `\n` is a
+ * hard break, space-less text breaks anywhere, space-separated text wraps on
+ * word boundaries (a too-long word is hard-split). Plain text is enough since
+ * inline styles don't change glyph advance in our model.
+ */
+export declare function countWrappedLines(text: string, max_width: number, font_size: number, letter_spacing?: number): number;
+/**
+ * Resolve a `line_height` Length to an absolute line advance (mm). A "%" unit
+ * is a multiplier of the font size (the parser stores `1.4`/`140%` alike as
+ * {value:1.4, unit:"%"}); an "mm" unit is used as-is. Shared by layout and the
+ * renderer so box estimate and drawing agree.
+ */
+export declare function resolveLineHeight(lineHeight: Length, font_size: number): number;
 /** Rough width/height estimate (mm) for a text block. */
-export declare function _estimate_text_box_size(text: string, font_size: number, direction: string): [number, number];
+export declare function _estimate_text_box_size(text: string, font_size: number, direction: string, lineHeight?: Length, letterSpacing?: number, wrap?: boolean): [number, number];
 export declare class LayoutEngine {
     page: Page;
     panels: LayoutedPanel[];

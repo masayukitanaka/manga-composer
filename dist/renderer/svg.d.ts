@@ -13,7 +13,7 @@
  * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
  * (docs/PORTING_NOTES.md).
  */
-import type { Page } from "../ast.js";
+import type { Page, SpeechAttrs } from "../ast.js";
 import { Rect, LayoutedPanel, LayoutedSpeech } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import type { ImageLoader } from "./imageLoader.js";
@@ -43,12 +43,46 @@ export declare class SVGRenderer {
     private _render_image_layers;
     private _render_one_image_layer;
     private _render_text;
-    _draw_text_block(parent: XmlElement, rect: Rect, text: string, font_size: number, direction: string, color: string, align?: string, padding?: number): void;
+    _draw_text_block(parent: XmlElement, rect: Rect, attrs: SpeechAttrs, color: string): void;
     private _render_speech;
     private _render_monologue;
 }
+export interface StyledChar {
+    ch: string;
+    italic: boolean;
+    bold: boolean;
+}
+/** Expand marked-up text into a flat per-character style array. */
+export declare function _style_chars(text: string, base: {
+    italic: boolean;
+    bold: boolean;
+}): StyledChar[];
+/**
+ * Wrap styled chars into lines. Mirrors `_wrap_horizontal_text`: `\n` is a hard
+ * break; a paragraph with no spaces (CJK) wraps by char count; a space-separated
+ * paragraph wraps on word boundaries. Returns a list of lines (each a
+ * StyledChar[]).
+ */
+export declare function _wrap_horizontal_styled(chars: StyledChar[], max_width: number, font_size: number, letter_spacing?: number): StyledChar[][];
+/** Group adjacent same-style chars in a line into runs for <tspan> output. */
+export declare function _group_styled_runs(line: StyledChar[]): {
+    text: string;
+    italic: boolean;
+    bold: boolean;
+}[];
 export declare function _wrap_horizontal_text(text: string, chars_per_line: number): string[];
 export declare function _vertical_glyph_offset(ch: string, font_size: number): [number, number];
 /** Whether a character should be rotated 90° when drawn in vertical text. */
 export declare function _vertical_glyph_rotate(ch: string): boolean;
+/** Whether a character is a small kana that gets shrunk + shifted top-right. */
+export declare function _vertical_glyph_is_small_kana(ch: string): boolean;
+/**
+ * SVG `transform` for a vertically-set glyph drawn at column-center `px` and
+ * baseline `py` (with text-anchor="middle"), or "" if none is needed:
+ *   - rotate glyphs (ー, dashes, brackets) 90° about their visual center, so the
+ *     horizontal stroke reads vertical and stays centered on the column axis;
+ *   - small kana (ゃゅょっ…) shrink and nudge toward the top-right of the cell;
+ *   - top-right punctuation (、。) nudge toward the top-right.
+ */
+export declare function _vertical_glyph_transform(ch: string, font_size: number, px: number, py: number): string;
 //# sourceMappingURL=svg.d.ts.map

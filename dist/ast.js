@@ -18,6 +18,12 @@ export const IMPORTANCES = [1, 2, 3];
 export const IMAGE_FITS = ["cover", "contain", "fill"];
 export const TEXT_DIRECTIONS = ["horizontal", "vertical"];
 export const ALIGNS = ["start", "center", "end"];
+export const FONT_STYLES = ["normal", "italic"];
+export const FONT_WEIGHTS = ["normal", "bold"];
+// Default font-family stack for speech/label text. Mirrors the value that was
+// previously hard-coded across renderer/svg.ts; a Japanese-first list so CJK
+// renders even when the user does not set `font_family`.
+export const DEFAULT_FONT_STACK = "Hiragino Sans, Hiragino Kaku Gothic Pro, Yu Gothic, Noto Sans CJK JP, sans-serif";
 export const BALLOON_SHAPES = [
     "oval",
     "shout",
@@ -106,6 +112,12 @@ function defaultSpeechAttrs() {
         text: "",
         textDirection: "horizontal",
         fontSize: 4.5,
+        fontFamily: "",
+        lineHeight: { value: 1.4, unit: "%" }, // unitless multiplier (see resolveLineHeight)
+        letterSpacing: 0.0,
+        fontStyle: "normal",
+        fontWeight: "normal",
+        wrap: true,
         padding: 1.5,
         x: null,
         y: null,
@@ -184,6 +196,7 @@ export const PANEL_ATTR_TYPES = {
     padding: "float",
     inner_ratio: "float",
     jitter: "float",
+    letter_spacing: "float",
     // string: str(value).strip('"')
     image: "string",
     text: "string",
@@ -192,12 +205,18 @@ export const PANEL_ATTR_TYPES = {
     background: "string",
     shape: "string",
     text_color: "string",
+    font_family: "string",
     // passthrough (enum): str(value)
     image_fit: "passthrough",
     image_clip: "passthrough",
     text_direction: "passthrough",
     anchor_pos: "passthrough",
     align: "passthrough",
+    font_style: "passthrough",
+    font_weight: "passthrough",
+    wrap: "passthrough",
+    // line_height is a Length (%/mm/unitless) — handled directly in the parser,
+    // not via coerceScalar.
 };
 // ── Allowed-key sets (extra="forbid" equivalent) ────────────────────────────
 //
@@ -264,6 +283,12 @@ export const BALLOON_ATTR_KEYS = new Set([
     "text",
     "text_direction",
     "font_size",
+    "font_family",
+    "line_height",
+    "letter_spacing",
+    "font_style",
+    "font_weight",
+    "wrap",
     "padding",
     "x",
     "y",
@@ -292,6 +317,12 @@ export const MONOLOGUE_ATTR_KEYS = new Set([
     "text",
     "text_direction",
     "font_size",
+    "font_family",
+    "line_height",
+    "letter_spacing",
+    "font_style",
+    "font_weight",
+    "wrap",
     "padding",
     "x",
     "y",

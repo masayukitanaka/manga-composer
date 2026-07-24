@@ -1,0 +1,70 @@
+// Font / typography controls for balloon & monologue text:
+//   font_family (CSS-like list), line_height, letter_spacing,
+//   font_style / font_weight, and inline <i>/<b> markup.
+// See .private/FONT.md.
+
+page {
+  size: B5
+  direction: rtl
+  gutter: 6
+
+  row height: 35% {
+    col {
+      panel a {
+        balloon {
+          anchor_pos: top_right
+          text: "これは<b>とても「大事」</b>
+な話だ。<i>……たぶん。</i>
+\<モノローグ>だっちゃ"
+          text_direction: vertical
+          line_height: 1.6
+          height: 70
+          padding: 10
+          width: 60
+        }
+      }
+    }
+    col {
+      panel b {
+        // A different font family + wider tracking + roomier lines.
+        monologue {
+          anchor_pos: top_left
+          text: "font_family と字間・行間の指定。
+ダーリンっちゃ"
+          font_family: "Yu Gothic, Hiragino Sans, sans-serif"
+          letter_spacing: 0.6
+          font_size: 3
+          line_height: 1.9
+        }
+      }
+    }
+  }
+
+  row {
+    panel c {
+      // wrap: false — no auto line breaks; the author controls them with \n.
+      // Text is allowed to overflow the box instead of being wrapped anywhere.
+      monologue {
+        anchor_pos: top_left
+        text: "FRED STARTED OFF BY LISTING ALL THE TV AND FILM
+PROJECTS HE BELIEVED <b>I'D MISSED</b> DURING MY TIME
+IN NEW YORK"
+        font_style: italic
+        wrap: false
+        border: 0.25
+        padding: 10
+        width: 150
+      }
+
+      monologue {
+        anchor_pos: bottom_left
+        text: "FRED STARTED OFF BY LISTING ALL THE TV AND FILM PROJECTS HE BELIEVED <b>I'D MISSED</b> DURING MY TIME IN NEW YORK"
+        font_style: italic
+        wrap: true
+        border: 0.25
+        padding: 10
+        width: 150
+      }
+    }
+  }
+}

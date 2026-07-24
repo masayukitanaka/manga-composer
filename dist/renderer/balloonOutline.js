@@ -93,7 +93,7 @@ export function renderBalloon(renderer, parent, speech) {
             parent.sub("circle", { cx: s(ox), cy: s(oy), r: s(cr), ...common });
         }
     }
-    renderer._draw_text_block(parent, r, attrs.text, attrs.fontSize, attrs.textDirection, "#000000", attrs.align, attrs.padding);
+    renderer._draw_text_block(parent, r, attrs, "#000000");
 }
 // ── angle helpers ───────────────────────────────────────────────────────────
 function _angle_to_edge_pos(math_angle) {

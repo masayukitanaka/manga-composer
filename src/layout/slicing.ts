@@ -22,6 +22,7 @@ import {
   type MonologueAttrs,
 } from "../ast.js";
 import { LayoutError } from "../errors.js";
+import { plainText } from "../renderer/richtext.js";
 
 const radians = (deg: number): number => (deg * Math.PI) / 180;
 
@@ -187,35 +188,205 @@ const _DEFAULT_SPEECH_H = 15.0;
 export const TEXT_CHAR_W_FACTOR = 1.0;
 export const TEXT_LINE_H_FACTOR = 1.4;
 
+// Advance width of one glyph as a fraction of font size. CJK / full-width glyphs
+// are ~square (1.0); Latin/ASCII and most narrow punctuation average ~0.5. This
+// is a coarse model (no font metrics), but it stops proportional Latin text from
+// wrapping as if every glyph were full-width. Used by both wrapping and the box
+// size estimate so they agree.
+const TEXT_CJK_W_FACTOR = 1.0;
+const TEXT_LATIN_W_FACTOR = 0.5;
+
+/** True for glyphs that occupy a roughly full-width (square) cell. */
+export function isFullWidthChar(ch: string): boolean {
+  const c = ch.codePointAt(0);
+  if (c === undefined) return false;
+  return (
+    (c >= 0x1100 && c <= 0x115f) || // Hangul Jamo
+    (c >= 0x2e80 && c <= 0x303e) || // CJK radicals, Kangxi, punctuation
+    (c >= 0x3041 && c <= 0x33ff) || // Hiragana, Katakana, CJK symbols
+    (c >= 0x3400 && c <= 0x4dbf) || // CJK ext A
+    (c >= 0x4e00 && c <= 0x9fff) || // CJK unified
+    (c >= 0xa000 && c <= 0xa4cf) || // Yi
+    (c >= 0xac00 && c <= 0xd7a3) || // Hangul syllables
+    (c >= 0xf900 && c <= 0xfaff) || // CJK compat ideographs
+    (c >= 0xfe30 && c <= 0xfe4f) || // CJK compat forms
+    (c >= 0xff00 && c <= 0xff60) || // Fullwidth forms
+    (c >= 0xffe0 && c <= 0xffe6) || // Fullwidth signs
+    (c >= 0x20000 && c <= 0x3fffd) // CJK ext B+ (supplementary)
+  );
+}
+
+/** Advance width (mm) of one character at the given font size + tracking. */
+export function charAdvance(ch: string, font_size: number, letter_spacing = 0.0): number {
+  const factor = isFullWidthChar(ch) ? TEXT_CJK_W_FACTOR : TEXT_LATIN_W_FACTOR;
+  return font_size * factor + letter_spacing;
+}
+
+/** Total advance width (mm) of a string. */
+export function measureTextWidth(text: string, font_size: number, letter_spacing = 0.0): number {
+  let w = 0;
+  for (const ch of text) w += charAdvance(ch, font_size, letter_spacing);
+  return w;
+}
+
+/**
+ * Count the lines that `text` wraps into at a fixed content width (mm). Mirrors
+ * the renderer's width-based wrapping (`_wrap_horizontal_styled`): `\n` is a
+ * hard break, space-less text breaks anywhere, space-separated text wraps on
+ * word boundaries (a too-long word is hard-split). Plain text is enough since
+ * inline styles don't change glyph advance in our model.
+ */
+export function countWrappedLines(
+  text: string,
+  max_width: number,
+  font_size: number,
+  letter_spacing = 0.0,
+): number {
+  if (!Number.isFinite(max_width) || max_width <= 0) {
+    return Math.max(1, text.split("\n").length);
+  }
+  const cw = (ch: string) => charAdvance(ch, font_size, letter_spacing);
+  const wordW = (w: string) => measureTextWidth(w, font_size, letter_spacing);
+  let lines = 0;
+  for (const para of text.split("\n")) {
+    if (para === "") {
+      lines += 1;
+      continue;
+    }
+    if (!para.includes(" ")) {
+      let w = 0;
+      let count = 1;
+      let any = false;
+      for (const ch of para) {
+        const a = cw(ch);
+        if (any && w + a > max_width) {
+          count += 1;
+          w = 0;
+        }
+        w += a;
+        any = true;
+      }
+      lines += count;
+      continue;
+    }
+    const words = para.split(" ");
+    let cur = "";
+    let count = 0;
+    for (let word of words) {
+      while (wordW(word) > max_width) {
+        if (cur) {
+          count += 1;
+          cur = "";
+        }
+        let cut = 0;
+        let w = 0;
+        for (let i = 0; i < word.length; i++) {
+          const a = cw(word[i]);
+          if (cut > 0 && w + a > max_width) break;
+          w += a;
+          cut = i + 1;
+        }
+        count += 1;
+        word = word.slice(cut);
+      }
+      const candidate = cur ? `${cur} ${word}` : word;
+      if (wordW(candidate) <= max_width) {
+        cur = candidate;
+      } else {
+        if (cur) count += 1;
+        cur = word;
+      }
+    }
+    count += 1; // final line
+    lines += count;
+  }
+  return Math.max(1, lines);
+}
+
+/**
+ * Resolve a `line_height` Length to an absolute line advance (mm). A "%" unit
+ * is a multiplier of the font size (the parser stores `1.4`/`140%` alike as
+ * {value:1.4, unit:"%"}); an "mm" unit is used as-is. Shared by layout and the
+ * renderer so box estimate and drawing agree.
+ */
+export function resolveLineHeight(lineHeight: Length, font_size: number): number {
+  if (lineHeight.unit === "mm") return lineHeight.value;
+  return font_size * lineHeight.value; // "%"/unitless multiplier
+}
+
 /** Rough width/height estimate (mm) for a text block. */
 export function _estimate_text_box_size(
   text: string,
   font_size: number,
   direction: string,
+  lineHeight: Length = { value: TEXT_LINE_H_FACTOR, unit: "%" },
+  letterSpacing = 0.0,
+  wrap = true,
 ): [number, number] {
-  if (!text) {
+  // Inline markup (<i>/<b>) must not inflate the character count.
+  const plain = plainText(text);
+  if (!plain) {
     return [_DEFAULT_SPEECH_W, _DEFAULT_SPEECH_H];
   }
 
   const MARGIN = 1.6;
   const ASPECT = 1.8; // target height / width ratio for vertical text
-  const char_w = font_size * TEXT_CHAR_W_FACTOR;
-  const line_h = font_size * TEXT_LINE_H_FACTOR;
-  const n = text.length;
+  const char_w = font_size * TEXT_CHAR_W_FACTOR + letterSpacing;
+  const line_h = resolveLineHeight(lineHeight, font_size);
+  const n = plain.length;
 
-  let w: number;
-  let h: number;
-  if (direction === "vertical") {
-    const chars_per_col = Math.max(1, Math.round(Math.sqrt((ASPECT * n * line_h) / char_w)));
-    const cols = Math.max(1, Math.ceil(n / chars_per_col));
-    w = line_h * cols * MARGIN;
-    h = char_w * Math.min(n, chars_per_col) * MARGIN;
-  } else {
-    const chars_per_line = Math.max(1, Math.round(Math.sqrt((n * line_h) / char_w)));
-    const lines = Math.max(1, Math.ceil(n / chars_per_line));
-    w = char_w * Math.min(n, chars_per_line) * MARGIN;
-    h = line_h * lines * MARGIN;
+  // wrap=false: no auto-wrap — the renderer breaks only at `\n`, so the box is
+  // sized to exactly those lines (longest paragraph = width; line count =
+  // height). The box may still be overflowed, but this keeps it sensible.
+  if (!wrap) {
+    const paras = plain.split("\n");
+    const longest = paras.reduce((m, p) => Math.max(m, [...p].length), 0);
+    if (direction === "vertical") {
+      // Each paragraph is one column; columns run right→left.
+      const w = line_h * Math.max(1, paras.length) * MARGIN;
+      const h = char_w * Math.max(1, longest) * MARGIN;
+      return [w, h];
+    }
+    const w = char_w * Math.max(1, longest) * MARGIN;
+    const h = line_h * Math.max(1, paras.length) * MARGIN;
+    return [w, h];
   }
+
+  // Longest unbreakable run: a space-separated token (a word) can only wrap at
+  // its ends, so the auto-sized box must be wide enough to hold the longest one
+  // — otherwise the renderer hard-splits it mid-word. Space-less CJK breaks
+  // anywhere, so it imposes no floor. Measured in mm (real glyph advances).
+  let longest_token_w = 0;
+  for (const para of plain.split("\n")) {
+    if (!para.includes(" ")) continue;
+    for (const word of para.split(" ")) {
+      longest_token_w = Math.max(longest_token_w, measureTextWidth(word, font_size, letterSpacing));
+    }
+  }
+
+  if (direction === "vertical") {
+    // Vertical CJK: keep the character-count model (glyphs stack full-width).
+    let longest_token = 0;
+    for (const para of plain.split("\n")) {
+      if (!para.includes(" ")) continue;
+      for (const word of para.split(" ")) longest_token = Math.max(longest_token, word.length);
+    }
+    let chars_per_col = Math.max(1, Math.round(Math.sqrt((ASPECT * n * line_h) / char_w)));
+    chars_per_col = Math.max(chars_per_col, longest_token);
+    const cols = Math.max(1, Math.ceil(n / chars_per_col));
+    const w = line_h * cols * MARGIN;
+    const h = char_w * Math.min(n, chars_per_col) * MARGIN;
+    return [w, h];
+  }
+
+  // Horizontal: pick a target line width from the total text width (a squarish
+  // block), floored to the longest word, then get the real wrapped line count.
+  const total_w = measureTextWidth(plain, font_size, letterSpacing);
+  let target_w = Math.sqrt(total_w * line_h); // area-based squarish target
+  target_w = Math.max(target_w, longest_token_w);
+  const lines = countWrappedLines(plain, target_w, font_size, letterSpacing);
+  const w = target_w * MARGIN;
+  const h = lines * line_h * MARGIN;
   return [w, h];
 }
 
@@ -711,11 +882,34 @@ export class LayoutEngine {
           height = width * aspect_ratio;
         } else if (height !== null && width === null && aspect_ratio) {
           width = height / aspect_ratio;
+        } else if (
+          width !== null &&
+          height === null &&
+          attrs.textDirection === "horizontal"
+        ) {
+          // Explicit width, auto height: derive height from how many lines the
+          // text actually wraps into at that width — otherwise the square-ish
+          // estimate ignores the given width and produces a huge, mostly-empty
+          // box.
+          const pad2 = attrs.padding * 2;
+          const content_w = Math.max(1, width - pad2);
+          const max_w = attrs.wrap ? content_w : Number.POSITIVE_INFINITY;
+          const nlines = countWrappedLines(
+            plainText(attrs.text),
+            max_w,
+            attrs.fontSize,
+            attrs.letterSpacing,
+          );
+          const line_h = resolveLineHeight(attrs.lineHeight, attrs.fontSize);
+          height = nlines * line_h + pad2;
         } else if (width === null || height === null) {
           const [est_w, est_h] = _estimate_text_box_size(
             attrs.text,
             attrs.fontSize,
             attrs.textDirection,
+            attrs.lineHeight,
+            attrs.letterSpacing,
+            attrs.wrap,
           );
           const pad2 = attrs.padding * 2;
           width = width !== null ? width : est_w + pad2;

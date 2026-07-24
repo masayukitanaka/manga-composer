@@ -37,7 +37,29 @@ program
     "auto",
   )
   .option("--dpi <n>", "DPI for PNG output (default: use DSL dpi setting or 300)")
-  .action((input: string, opts: { output?: string; format: string; dpi?: string }) => {
+  .option(
+    "--font-dir <path>",
+    "Directory of font files to load for PNG rendering (repeatable)",
+    (val: string, acc: string[]) => [...acc, val],
+    [] as string[],
+  )
+  .option(
+    "--font-file <path>",
+    "Font file to load for PNG rendering (repeatable)",
+    (val: string, acc: string[]) => [...acc, val],
+    [] as string[],
+  )
+  .action(
+    (
+      input: string,
+      opts: {
+        output?: string;
+        format: string;
+        dpi?: string;
+        fontDir: string[];
+        fontFile: string[];
+      },
+    ) => {
     try {
       const sourcePath = resolve(input);
       const source = readFileSync(sourcePath, "utf-8");
@@ -73,13 +95,20 @@ program
         writeFileSync(outputPath, svgStr, "utf-8");
       } else {
         const dpi = opts.dpi !== undefined ? Number(opts.dpi) : null;
+        const font =
+          opts.fontDir.length || opts.fontFile.length
+            ? {
+                fontDirs: opts.fontDir.map((p) => resolve(p)),
+                fontFiles: opts.fontFile.map((p) => resolve(p)),
+              }
+            : undefined;
         let pngBytes: Buffer;
         if (page.config.sizeUnit === "px" && dpi === null) {
           const wPx = Math.round(page.config.widthMm / (MM_PER_INCH / PX_PER_INCH));
-          pngBytes = svgToPng(svgStr, { outputWidth: wPx, widthMm: page.config.widthMm });
+          pngBytes = svgToPng(svgStr, { outputWidth: wPx, widthMm: page.config.widthMm, font });
         } else {
           const actualDpi = dpi !== null ? dpi : page.config.dpi;
-          pngBytes = svgToPng(svgStr, { dpi: actualDpi, widthMm: page.config.widthMm });
+          pngBytes = svgToPng(svgStr, { dpi: actualDpi, widthMm: page.config.widthMm, font });
         }
         writeFileSync(outputPath, pngBytes);
       }

@@ -24,7 +24,8 @@
  */
 import { tokenize } from "./lexer.js";
 import { ParseError } from "./errors.js";
-import { defaultPageConfig, defaultPanelAttrs, defaultImageLayer, defaultBalloonAttrs, defaultMonologueAttrs, PAGE_SIZES, PANEL_ATTR_TYPES, PAGE_ATTR_KEYS, PANEL_ATTR_KEYS, IMAGE_LAYER_ATTR_KEYS, BALLOON_ATTR_KEYS, MONOLOGUE_ATTR_KEYS, DIRECTIONS, IMPORTANCES, IMAGE_FITS, TEXT_DIRECTIONS, ALIGNS, BALLOON_SHAPES, ANCHOR_POSITIONS, } from "./ast.js";
+import { defaultPageConfig, defaultPanelAttrs, defaultImageLayer, defaultBalloonAttrs, defaultMonologueAttrs, PAGE_SIZES, PANEL_ATTR_TYPES, PAGE_ATTR_KEYS, PANEL_ATTR_KEYS, IMAGE_LAYER_ATTR_KEYS, BALLOON_ATTR_KEYS, MONOLOGUE_ATTR_KEYS, DIRECTIONS, IMPORTANCES, IMAGE_FITS, TEXT_DIRECTIONS, ALIGNS, BALLOON_SHAPES, ANCHOR_POSITIONS, FONT_STYLES, FONT_WEIGHTS, } from "./ast.js";
+import { plainText } from "./renderer/richtext.js";
 // ── assertLiteral / assertKnownKeys helpers ─────────────────────────────────
 function assertLiteral(value, allowed, field) {
     if (allowed.includes(value)) {
@@ -639,6 +640,34 @@ class Parser {
         return len;
     }
     /**
+     * Parse a `line_height` value. A bare number or `%` is a multiplier of the
+     * font size (stored as unit "%": `1.4` → {1.4,"%"}, `140%` → {1.4,"%"}); an
+     * `mm` value is an absolute line advance. px/pt are rejected. Must be > 0.
+     */
+    lineHeightLength(val) {
+        let len;
+        if (val.kind === "length") {
+            len = val.length; // NUMBER UNIT — only mm is meaningful here
+        }
+        else {
+            const text = val.text;
+            if (text.endsWith("%")) {
+                len = { value: toFloat(text.replace(/%$/, "")) / 100, unit: "%" };
+            }
+            else {
+                // bare number = multiplier
+                len = { value: toFloat(text), unit: "%" };
+            }
+        }
+        if (len.unit !== "%" && len.unit !== "mm") {
+            throw new ParseError(`line_height must be a number, % or mm (got ${JSON.stringify(len.unit)})`);
+        }
+        if (len.value <= 0) {
+            throw new ParseError(`line_height must be positive (got ${len.value})`);
+        }
+        return len;
+    }
+    /**
      * Fold the panel's `image:` sugar and/or an `images { ... }` block into the
      * normalized ImageLayer[]. Errors if both are given.
      */
@@ -794,10 +823,30 @@ class Parser {
         }
         return attrs;
     }
-    applySpeechShared(attrs, name, v) {
+    applySpeechShared(attrs, name, v, val) {
         switch (name) {
             case "text":
+                // Validate inline markup up front so tag errors surface at parse time.
+                plainText(v);
                 attrs.text = v;
+                return true;
+            case "font_family":
+                attrs.fontFamily = v;
+                return true;
+            case "line_height":
+                attrs.lineHeight = this.lineHeightLength(val);
+                return true;
+            case "letter_spacing":
+                attrs.letterSpacing = v;
+                return true;
+            case "font_style":
+                attrs.fontStyle = assertLiteral(v, FONT_STYLES, "font_style");
+                return true;
+            case "font_weight":
+                attrs.fontWeight = assertLiteral(v, FONT_WEIGHTS, "font_weight");
+                return true;
+            case "wrap":
+                attrs.wrap = toBool(v, "wrap");
                 return true;
             case "text_direction":
                 attrs.textDirection = assertLiteral(v, TEXT_DIRECTIONS, "text_direction");
@@ -856,7 +905,7 @@ class Parser {
         const attrs = defaultBalloonAttrs();
         for (const [name, val] of Object.entries(raw)) {
             const v = this.coerceScalar(name, val);
-            if (this.applySpeechShared(attrs, name, v))
+            if (this.applySpeechShared(attrs, name, v, val))
                 continue;
             switch (name) {
                 case "shape":
@@ -891,7 +940,7 @@ class Parser {
         const attrs = defaultMonologueAttrs();
         for (const [name, val] of Object.entries(raw)) {
             const v = this.coerceScalar(name, val);
-            if (this.applySpeechShared(attrs, name, v))
+            if (this.applySpeechShared(attrs, name, v, val))
                 continue;
             switch (name) {
                 case "text_color":

@@ -21,6 +21,8 @@ export type Importance = 1 | 2 | 3;
 export type ImageFit = "cover" | "contain" | "fill";
 export type TextDirection = "horizontal" | "vertical";
 export type Align = "start" | "center" | "end";
+export type FontStyle = "normal" | "italic";
+export type FontWeight = "normal" | "bold";
 export type BalloonShape =
   | "oval"
   | "shout"
@@ -46,6 +48,14 @@ export const IMPORTANCES: readonly Importance[] = [1, 2, 3];
 export const IMAGE_FITS: readonly ImageFit[] = ["cover", "contain", "fill"];
 export const TEXT_DIRECTIONS: readonly TextDirection[] = ["horizontal", "vertical"];
 export const ALIGNS: readonly Align[] = ["start", "center", "end"];
+export const FONT_STYLES: readonly FontStyle[] = ["normal", "italic"];
+export const FONT_WEIGHTS: readonly FontWeight[] = ["normal", "bold"];
+
+// Default font-family stack for speech/label text. Mirrors the value that was
+// previously hard-coded across renderer/svg.ts; a Japanese-first list so CJK
+// renders even when the user does not set `font_family`.
+export const DEFAULT_FONT_STACK =
+  "Hiragino Sans, Hiragino Kaku Gothic Pro, Yu Gothic, Noto Sans CJK JP, sans-serif";
 export const BALLOON_SHAPES: readonly BalloonShape[] = [
   "oval",
   "shout",
@@ -230,9 +240,24 @@ export function defaultPanelAttrs(): PanelAttrs {
 // ── Speech attrs (balloon / monologue) ──────────────────────────────────────
 
 export interface SpeechAttrs {
+  // `text` keeps the raw inline markup (<i>…</i>, <b>…</b>) as authored; runs
+  // are split at render/layout time by renderer/richtext.ts.
   text: string;
   textDirection: TextDirection;
   fontSize: number;
+  // CSS-like comma-separated family list; "" means use DEFAULT_FONT_STACK.
+  fontFamily: string;
+  // Line spacing. A unitless/`%` value is a multiplier of fontSize (1.4 = the
+  // legacy TEXT_LINE_H_FACTOR); an `mm` value is an absolute line advance.
+  lineHeight: Length;
+  // Extra tracking between glyphs, in mm (may be negative).
+  letterSpacing: number;
+  // Element-wide defaults; inline <i>/<b> override per-run.
+  fontStyle: FontStyle;
+  fontWeight: FontWeight;
+  // When false, text is NOT auto-wrapped: it breaks only at explicit `\n` and
+  // is allowed to overflow the box, so the author controls every line break.
+  wrap: boolean;
   padding: number;
   x: number | null;
   y: number | null;
@@ -268,6 +293,12 @@ function defaultSpeechAttrs(): SpeechAttrs {
     text: "",
     textDirection: "horizontal",
     fontSize: 4.5,
+    fontFamily: "",
+    lineHeight: { value: 1.4, unit: "%" }, // unitless multiplier (see resolveLineHeight)
+    letterSpacing: 0.0,
+    fontStyle: "normal",
+    fontWeight: "normal",
+    wrap: true,
     padding: 1.5,
     x: null,
     y: null,
@@ -429,6 +460,7 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   padding: "float",
   inner_ratio: "float",
   jitter: "float",
+  letter_spacing: "float",
   // string: str(value).strip('"')
   image: "string",
   text: "string",
@@ -437,12 +469,18 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   background: "string",
   shape: "string",
   text_color: "string",
+  font_family: "string",
   // passthrough (enum): str(value)
   image_fit: "passthrough",
   image_clip: "passthrough",
   text_direction: "passthrough",
   anchor_pos: "passthrough",
   align: "passthrough",
+  font_style: "passthrough",
+  font_weight: "passthrough",
+  wrap: "passthrough",
+  // line_height is a Length (%/mm/unitless) — handled directly in the parser,
+  // not via coerceScalar.
 };
 
 // ── Allowed-key sets (extra="forbid" equivalent) ────────────────────────────
@@ -514,6 +552,12 @@ export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
   "text",
   "text_direction",
   "font_size",
+  "font_family",
+  "line_height",
+  "letter_spacing",
+  "font_style",
+  "font_weight",
+  "wrap",
   "padding",
   "x",
   "y",
@@ -543,6 +587,12 @@ export const MONOLOGUE_ATTR_KEYS: ReadonlySet<string> = new Set([
   "text",
   "text_direction",
   "font_size",
+  "font_family",
+  "line_height",
+  "letter_spacing",
+  "font_style",
+  "font_weight",
+  "wrap",
   "padding",
   "x",
   "y",

@@ -187,6 +187,10 @@ function imageLayerAttrs(layer) {
 function lengthEq(a, b) {
     return a.value === b.value && a.unit === b.unit;
 }
+/** line_height: mm as `6mm`, a multiplier (unit "%") as a bare number `1.8`. */
+function lineHeightStr(l) {
+    return l.unit === "mm" ? `${num(l.value)}mm` : num(l.value);
+}
 function panelAttrLines(a, cfg) {
     const d = defaultPanelAttrs();
     // parse() overrides the panel border/borderColor default with the page value.
@@ -260,6 +264,18 @@ function speechSharedLines(a, d) {
         out.push(`text_direction: ${a.textDirection}`);
     if (a.fontSize !== d.fontSize)
         out.push(`font_size: ${num(a.fontSize)}`);
+    if (a.fontFamily !== d.fontFamily)
+        out.push(`font_family: ${str(a.fontFamily)}`);
+    if (!lengthEq(a.lineHeight, d.lineHeight))
+        out.push(`line_height: ${lineHeightStr(a.lineHeight)}`);
+    if (a.letterSpacing !== d.letterSpacing)
+        out.push(`letter_spacing: ${num(a.letterSpacing)}`);
+    if (a.fontStyle !== d.fontStyle)
+        out.push(`font_style: ${a.fontStyle}`);
+    if (a.fontWeight !== d.fontWeight)
+        out.push(`font_weight: ${a.fontWeight}`);
+    if (a.wrap !== d.wrap)
+        out.push(`wrap: ${a.wrap}`);
     if (a.padding !== d.padding)
         out.push(`padding: ${num(a.padding)}`);
     if (a.x !== d.x)

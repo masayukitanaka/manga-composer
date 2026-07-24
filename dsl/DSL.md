@@ -536,9 +536,15 @@ page {
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
-| `text` | string | none (required) | Text to display |
+| `text` | string | none (required) | Text to display. Supports inline `<i>…</i>` / `<b>…</b>` (see Typography below) |
 | `text_direction` | `horizontal` \| `vertical` | `horizontal` | Text direction |
 | `font_size` | number (mm) | `4.5` | Font size |
+| `font_family` | string | (a Japanese-first sans-serif stack) | CSS-like comma-separated family list, in priority order (e.g. `"Yu Gothic, Hiragino Sans, sans-serif"`). The renderer uses the first available; supply font files to the PNG renderer for device-independent output |
+| `line_height` | number \| `<n>mm` | `1.4` | Line spacing. A bare number / `%` is a multiplier of `font_size` (`1.8`, `150%`); an `mm` value is an absolute line advance |
+| `letter_spacing` | number (mm) | `0` | Extra tracking between glyphs (may be negative) |
+| `font_style` | `normal` \| `italic` | `normal` | Element-wide style (inline `<i>` overrides per-run) |
+| `font_weight` | `normal` \| `bold` | `normal` | Element-wide weight (inline `<b>` overrides per-run) |
+| `wrap` | `true` \| `false` | `true` | Auto line-wrapping. `false` disables it: text breaks **only** at explicit `\n` and is allowed to overflow, so you control every line break |
 | `padding` | number (mm) | `1.5` | Inset between the box edge and the text. When `width`/`height` are omitted, the text-based size estimate is padded by this amount (the actual text area stays the same size). Increase it when text looks cramped, e.g. in a `monologue`'s edge-to-edge rectangle |
 | `x` | number (mm) | none | Absolute position (page coordinates): top-left X. Overrides the X axis only — set alone, `y` still follows `anchor_pos` |
 | `y` | number (mm) | none | Absolute position (page coordinates): top-left Y. Overrides the Y axis only — set alone, `x` still follows `anchor_pos` |
@@ -556,6 +562,31 @@ page {
 **How positioning works:** `anchor_pos` picks which corner/edge of **the panel this element is nested inside** to use as the reference point. The element's box then grows from that point **toward the inside of the panel** — e.g. `top_right` aligns the box's top-right corner with the owning panel's top-right corner, so the box grows down and to the left, into the panel. `margin` (default 3mm) nudges that reference point further along the same growth direction, so the balloon doesn't sit flush against the panel border. Setting `x` and/or `y` uses an absolute page coordinate for that axis instead — each overrides independently, so `y: 200` alone pushes the box down while `x` keeps following `anchor_pos` (useful for a caption band that straddles multiple panels, or to pin one axis while leaving the other automatic). `margin` still applies to an overridden axis too, nudging it toward the owning panel's centre on that axis.
 
 **On text overflow:** when `width`/`height` are omitted, the box size is a rough estimate based on character count — not an accurate layout calculation. If the text is too long for the box, it is **drawn overflowing rather than auto-shrunk**. Set `width`/`height`/`font_size` explicitly if the estimate doesn't fit.
+
+**Typography & inline markup:**
+
+- `font_family` / `line_height` / `letter_spacing` control the whole element; `font_style` / `font_weight` set element-wide italic/bold.
+- Use inline tags for partial emphasis: `<i>…</i>` (italic) and `<b>…</b>` (bold), case-insensitive and nestable. Write a literal `<` as `\<`.
+
+```manga
+balloon {
+  text: "That was <b>absolutely</b> <i>not</i> the plan."
+  font_family: "Yu Gothic, sans-serif"
+  line_height: 1.7
+  letter_spacing: 0.3
+}
+```
+
+- **`wrap: false`** turns off automatic line-wrapping. The text then breaks only where you put a newline (`\n` in the string) and is allowed to overflow the box — handy for a single-line caption where automatic wrapping would break at the wrong place. With `wrap: true` (the default), lines wrap to fit the box (word boundaries for spaced text, anywhere for CJK).
+
+```manga
+monologue {
+  // Breaks only at the newline; each line may run past the box edge.
+  text: "FRED LISTED EVERY PROJECT
+HE BELIEVED I'D MISSED IN NEW YORK"
+  wrap: false
+}
+```
 
 #### balloon-specific Attributes
 

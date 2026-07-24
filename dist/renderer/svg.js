@@ -13,8 +13,10 @@
  * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
  * (docs/PORTING_NOTES.md).
  */
-import { Rect, LayoutedSpeech, resolveImageLayerRect, } from "../layout/slicing.js";
+import { DEFAULT_FONT_STACK } from "../ast.js";
+import { Rect, LayoutedSpeech, resolveImageLayerRect, resolveLineHeight, charAdvance, } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
+import { parseRichText } from "./richtext.js";
 import { renderBalloon } from "./balloonOutline.js";
 const radians = (deg) => (deg * Math.PI) / 180;
 // Number → string. Plain String(); the harness handles the 20.0-vs-20 gap.
@@ -798,20 +800,36 @@ export class SVGRenderer {
         text_elem.setText(attrs.text);
     }
     // ── speech elements (balloon/monologue) ───────────────────────────────
-    _draw_text_block(parent, rect, text, font_size, direction, color, align = "start", padding = 0.0) {
+    _draw_text_block(parent, rect, attrs, color) {
+        const text = attrs.text;
         if (!text)
             return;
-        const line_h = font_size * 1.4;
+        const font_size = attrs.fontSize;
+        const direction = attrs.textDirection;
+        const align = attrs.align;
+        const padding = attrs.padding;
+        const font_family = attrs.fontFamily || DEFAULT_FONT_STACK;
+        const line_h = resolveLineHeight(attrs.lineHeight, font_size);
+        const glyph_adv = font_size + attrs.letterSpacing; // per-glyph advance (H & V)
+        // Per-character style, honoring inline <i>/<b> and element-wide defaults.
+        const styled = _style_chars(text, {
+            italic: attrs.fontStyle === "italic",
+            bold: attrs.fontWeight === "bold",
+        });
         const inset_rect = new Rect(rect.x + padding, rect.y + padding, Math.max(0.0, rect.w - 2 * padding), Math.max(0.0, rect.h - 2 * padding));
         if (direction === "vertical") {
             // Vertical text runs top→bottom, columns right→left. An explicit newline
             // starts a new column; within a paragraph, wrap by how many glyphs fit in
             // the column height. `\n` is a hard column break, never a rendered glyph.
-            const chars_per_col = Math.max(1, Math.trunc(inset_rect.h / (font_size * 1.0)));
+            // With wrap=false, a paragraph is never split — only `\n` breaks columns,
+            // and text may overflow the box (author controls every break).
+            const chars_per_col = attrs.wrap
+                ? Math.max(1, Math.trunc(inset_rect.h / glyph_adv))
+                : Number.POSITIVE_INFINITY;
             const cols = [];
-            for (const para of text.split("\n")) {
-                if (para === "") {
-                    cols.push(""); // blank line = empty column (spacing)
+            for (const para of _split_styled(styled, "\n")) {
+                if (para.length === 0) {
+                    cols.push([]); // blank line = empty column (spacing)
                     continue;
                 }
                 for (let i = 0; i < para.length; i += chars_per_col) {
@@ -819,11 +837,11 @@ export class SVGRenderer {
                 }
             }
             if (cols.length === 0)
-                cols.push(text);
+                cols.push(styled);
             const block_w = cols.length * line_h;
             const col0_x = inset_rect.x + inset_rect.w / 2 + block_w / 2 - line_h / 2;
             const col_len = cols.reduce((m, c) => Math.max(m, c.length), 0);
-            const block_h = col_len * font_size;
+            const block_h = col_len * glyph_adv;
             let row0_y;
             if (align === "start")
                 row0_y = inset_rect.y + font_size * 0.8;
@@ -835,30 +853,34 @@ export class SVGRenderer {
                 const col = cols[ci];
                 const cx = col0_x - ci * line_h;
                 for (let chi = 0; chi < col.length; chi++) {
-                    const ch = col[chi];
-                    const [gx, gy] = _vertical_glyph_offset(ch, font_size);
-                    const px = cx + gx;
-                    const py = row0_y + chi * font_size + gy;
+                    const { ch, italic, bold } = col[chi];
+                    // Base position: glyph centered on the column axis (cx), baseline at py.
+                    const px = cx;
+                    const py = row0_y + chi * glyph_adv;
                     const glyphAttrs = {
                         x: s(px),
                         y: s(py),
                         "text-anchor": "middle",
                         "font-size": s(font_size),
-                        "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
+                        "font-family": font_family,
                         fill: color,
                     };
-                    // Rotate horizontal glyphs (ー, dashes, brackets…) so they read as a
-                    // vertical stroke, centered on the glyph's position.
-                    if (_vertical_glyph_rotate(ch)) {
-                        glyphAttrs.transform = `rotate(90 ${s(px)} ${s(py - font_size * 0.3)})`;
-                    }
+                    if (italic)
+                        glyphAttrs["font-style"] = "italic";
+                    if (bold)
+                        glyphAttrs["font-weight"] = "bold";
+                    const tf = _vertical_glyph_transform(ch, font_size, px, py);
+                    if (tf)
+                        glyphAttrs.transform = tf;
                     parent.sub("text", glyphAttrs).setText(ch);
                 }
             }
             return;
         }
-        const chars_per_line = Math.max(1, Math.trunc(inset_rect.w / (font_size * 1.0)));
-        const lines = _wrap_horizontal_text(text, chars_per_line);
+        // wrap=false: break only at explicit `\n`, allowing overflow. Otherwise
+        // wrap to the inset box width, measuring each glyph's real advance.
+        const max_line_w = attrs.wrap ? inset_rect.w : Number.POSITIVE_INFINITY;
+        const lines = _wrap_horizontal_styled(styled, max_line_w, font_size, attrs.letterSpacing);
         const anchor_map = { start: "start", center: "middle", end: "end" };
         const text_anchor = anchor_map[align] ?? "start";
         let tx;
@@ -868,18 +890,53 @@ export class SVGRenderer {
             tx = inset_rect.x + inset_rect.w / 2;
         else
             tx = inset_rect.x + inset_rect.w;
+        // Vertically place the text block by the anchor's vertical intent: a
+        // `top_*` anchor keeps text at the box top, `bottom_*` at the bottom, and
+        // everything else (center/left/right) centers it. Otherwise an auto-tall box
+        // (e.g. anchor_pos: top_left with estimated height) would center its text
+        // and look like it's floating in the middle rather than at the top.
         const block_h = lines.length * line_h;
-        const y0 = inset_rect.y + Math.max(0.0, (inset_rect.h - block_h) / 2) + font_size;
-        const text_elem = parent.sub("text", {
+        const free_v = Math.max(0.0, inset_rect.h - block_h);
+        let y0;
+        if (attrs.anchorPos.startsWith("top")) {
+            y0 = inset_rect.y + font_size;
+        }
+        else if (attrs.anchorPos.startsWith("bottom")) {
+            y0 = inset_rect.y + free_v + font_size;
+        }
+        else {
+            y0 = inset_rect.y + free_v / 2 + font_size;
+        }
+        const textAttrs = {
             x: s(tx),
             y: s(y0),
             "text-anchor": text_anchor,
             "font-size": s(font_size),
-            "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
+            "font-family": font_family,
             fill: color,
-        });
+        };
+        if (attrs.letterSpacing !== 0)
+            textAttrs["letter-spacing"] = s(attrs.letterSpacing);
+        const text_elem = parent.sub("text", textAttrs);
         for (let i = 0; i < lines.length; i++) {
-            text_elem.sub("tspan", { x: s(tx), y: s(y0 + i * line_h) }).setText(lines[i]);
+            // Each line is emitted as one or more <tspan>s: a new tspan starts a new
+            // line (x + y positioned), further tspans on the same line only carry the
+            // decoration change. Empty lines still emit a positioned empty tspan.
+            const runs = _group_styled_runs(lines[i]);
+            const ly = s(y0 + i * line_h);
+            if (runs.length === 0) {
+                text_elem.sub("tspan", { x: s(tx), y: ly });
+                continue;
+            }
+            for (let ri = 0; ri < runs.length; ri++) {
+                const run = runs[ri];
+                const tspanAttrs = ri === 0 ? { x: s(tx), y: ly } : {};
+                if (run.italic)
+                    tspanAttrs["font-style"] = "italic";
+                if (run.bold)
+                    tspanAttrs["font-weight"] = "bold";
+                text_elem.sub("tspan", tspanAttrs).setText(run.text);
+            }
         }
     }
     _render_speech(bg_parent, border_parent, speech, _defs = null) {
@@ -914,8 +971,129 @@ export class SVGRenderer {
                 "stroke-width": s(attrs.border),
             });
         }
-        this._draw_text_block(bg_parent, r, attrs.text, attrs.fontSize, attrs.textDirection, attrs.textColor, attrs.align, attrs.padding);
+        this._draw_text_block(bg_parent, r, attrs, attrs.textColor);
     }
+}
+/** Expand marked-up text into a flat per-character style array. */
+export function _style_chars(text, base) {
+    const out = [];
+    for (const run of parseRichText(text, base)) {
+        for (const ch of run.text)
+            out.push({ ch, italic: run.italic, bold: run.bold });
+    }
+    return out;
+}
+/** Split styled chars on a delimiter char (dropping the delimiter). */
+function _split_styled(chars, delim) {
+    const parts = [];
+    let cur = [];
+    for (const c of chars) {
+        if (c.ch === delim) {
+            parts.push(cur);
+            cur = [];
+        }
+        else {
+            cur.push(c);
+        }
+    }
+    parts.push(cur);
+    return parts;
+}
+/**
+ * Wrap styled chars into lines. Mirrors `_wrap_horizontal_text`: `\n` is a hard
+ * break; a paragraph with no spaces (CJK) wraps by char count; a space-separated
+ * paragraph wraps on word boundaries. Returns a list of lines (each a
+ * StyledChar[]).
+ */
+export function _wrap_horizontal_styled(chars, max_width, font_size, letter_spacing = 0.0) {
+    // Width (mm) of a run of styled chars, using the per-glyph advance model.
+    const widthOf = (cs) => {
+        let w = 0;
+        for (const c of cs)
+            w += charAdvance(c.ch, font_size, letter_spacing);
+        return w;
+    };
+    // With max_width = Infinity (wrap disabled), a paragraph never breaks.
+    const noWrap = !Number.isFinite(max_width) || max_width <= 0;
+    const lines = [];
+    for (const para of _split_styled(chars, "\n")) {
+        if (para.length === 0) {
+            lines.push([]);
+            continue;
+        }
+        if (noWrap) {
+            lines.push(para);
+            continue;
+        }
+        const hasSpace = para.some((c) => c.ch === " ");
+        if (!hasSpace) {
+            // No spaces (CJK): break anywhere, accumulating width.
+            let cur = [];
+            let w = 0;
+            for (const c of para) {
+                const cw = charAdvance(c.ch, font_size, letter_spacing);
+                if (cur.length > 0 && w + cw > max_width) {
+                    lines.push(cur);
+                    cur = [];
+                    w = 0;
+                }
+                cur.push(c);
+                w += cw;
+            }
+            if (cur.length)
+                lines.push(cur);
+            continue;
+        }
+        // Word wrap for space-separated text (styles ride along per char).
+        const words = _split_styled(para, " ");
+        let current = [];
+        const space = { ch: " ", italic: false, bold: false };
+        for (let word of words) {
+            // A single word wider than the line: hard-split it by width.
+            while (widthOf(word) > max_width) {
+                if (current.length) {
+                    lines.push(current);
+                    current = [];
+                }
+                let cut = 0;
+                let w = 0;
+                for (let i = 0; i < word.length; i++) {
+                    const cw = charAdvance(word[i].ch, font_size, letter_spacing);
+                    if (cut > 0 && w + cw > max_width)
+                        break;
+                    w += cw;
+                    cut = i + 1;
+                }
+                lines.push(word.slice(0, cut));
+                word = word.slice(cut);
+            }
+            const candidate = current.length > 0 ? [...current, space, ...word] : word;
+            if (widthOf(candidate) <= max_width) {
+                current = candidate;
+            }
+            else {
+                if (current.length)
+                    lines.push(current);
+                current = word;
+            }
+        }
+        lines.push(current);
+    }
+    return lines.length > 0 ? lines : [chars];
+}
+/** Group adjacent same-style chars in a line into runs for <tspan> output. */
+export function _group_styled_runs(line) {
+    const runs = [];
+    for (const c of line) {
+        const last = runs[runs.length - 1];
+        if (last && last.italic === c.italic && last.bold === c.bold) {
+            last.text += c.ch;
+        }
+        else {
+            runs.push({ text: c.ch, italic: c.italic, bold: c.bold });
+        }
+    }
+    return runs;
 }
 // ── text wrapping / vertical glyph helpers ──────────────────────────────────
 export function _wrap_horizontal_text(text, chars_per_line) {
@@ -963,6 +1141,19 @@ export function _wrap_horizontal_text(text, chars_per_line) {
 }
 const _VERTICAL_PUNCT_OFFSET_RATIO = [0.42, -0.42];
 const _VERTICAL_TOP_RIGHT_PUNCTUATION = "、。，．,.";
+// Small kana (拗音・促音): in vertical Japanese these sit slightly smaller and
+// pushed toward the top-right of the cell rather than centered.
+const _VERTICAL_SMALL_KANA = new Set([
+    "ゃ", "ゅ", "ょ", "っ", "ぁ", "ぃ", "ぅ", "ぇ", "ぉ", "ゎ", "ゕ", "ゖ",
+    "ャ", "ュ", "ョ", "ッ", "ァ", "ィ", "ゥ", "ェ", "ォ", "ヮ", "ヵ", "ヶ",
+]);
+const _SMALL_KANA_SCALE = 0.78;
+const _SMALL_KANA_DX_RATIO = 0.11; // → right
+const _SMALL_KANA_DY_RATIO = 0.14; // → up (subtracted from y)
+// A glyph's approximate visual center above the baseline, as a fraction of the
+// font size. Used as the rotation pivot so rotated glyphs stay on the column
+// axis (x = cx) rather than drifting sideways.
+const _GLYPH_CENTER_RATIO = 0.36;
 export function _vertical_glyph_offset(ch, font_size) {
     if (_VERTICAL_TOP_RIGHT_PUNCTUATION.includes(ch)) {
         const [rx, ry] = _VERTICAL_PUNCT_OFFSET_RATIO;
@@ -979,16 +1170,56 @@ export function _vertical_glyph_offset(ch, font_size) {
 const _VERTICAL_ROTATE_GLYPHS = new Set([
     "ー", // 長音符
     "-", "‐", "‑", "–", "—", "―", // hyphen / dashes / horizontal bar
-    "…", // 中点省略はそのまま縦でも可だが横棒感が強いので回転
+    "…", // 三点リーダ（横棒感が強いので回転）
     "～", "〜", "~", // wave dash / tilde
     "(", ")", "（", "）",
     "[", "]", "「", "」", "『", "』", "【", "】", "〔", "〕",
     "{", "}", "｛", "｝",
     "<", ">", "＜", "＞", "〈", "〉", "《", "》",
     "=", "＝",
+    "^", "＾",
 ]);
+// Rotation pivot height above the baseline, as a fraction of font size. Chosen
+// empirically (with the default font stack) so rotated glyphs — comparison marks
+// ＜＞, dashes ー, brackets 「」 — land on the column axis instead of drifting
+// sideways. See the pivot-comparison note in .private/FONT.md.
+const _ROTATE_PIVOT_RATIO = 0.28;
 /** Whether a character should be rotated 90° when drawn in vertical text. */
 export function _vertical_glyph_rotate(ch) {
     return _VERTICAL_ROTATE_GLYPHS.has(ch);
+}
+/** Whether a character is a small kana that gets shrunk + shifted top-right. */
+export function _vertical_glyph_is_small_kana(ch) {
+    return _VERTICAL_SMALL_KANA.has(ch);
+}
+/**
+ * SVG `transform` for a vertically-set glyph drawn at column-center `px` and
+ * baseline `py` (with text-anchor="middle"), or "" if none is needed:
+ *   - rotate glyphs (ー, dashes, brackets) 90° about their visual center, so the
+ *     horizontal stroke reads vertical and stays centered on the column axis;
+ *   - small kana (ゃゅょっ…) shrink and nudge toward the top-right of the cell;
+ *   - top-right punctuation (、。) nudge toward the top-right.
+ */
+export function _vertical_glyph_transform(ch, font_size, px, py) {
+    if (_vertical_glyph_rotate(ch)) {
+        const cy = py - font_size * _ROTATE_PIVOT_RATIO;
+        return `rotate(90 ${s(px)} ${s(cy)})`;
+    }
+    if (_vertical_glyph_is_small_kana(ch)) {
+        const dx = font_size * _SMALL_KANA_DX_RATIO;
+        const dy = -font_size * _SMALL_KANA_DY_RATIO;
+        // Scale about the glyph's visual center (px, cy) so it shrinks in place,
+        // then translate toward the top-right.
+        const cy = py - font_size * _GLYPH_CENTER_RATIO;
+        const t = 1 - _SMALL_KANA_SCALE;
+        // scale-about-point (px,cy): translate(px*t, cy*t) then scale(s)
+        return (`translate(${s(dx + px * t)} ${s(dy + cy * t)}) ` +
+            `scale(${s(_SMALL_KANA_SCALE)})`);
+    }
+    if (_VERTICAL_TOP_RIGHT_PUNCTUATION.includes(ch)) {
+        const [rx, ry] = _VERTICAL_PUNCT_OFFSET_RATIO;
+        return `translate(${s(rx * font_size)} ${s(ry * font_size)})`;
+    }
+    return "";
 }
 //# sourceMappingURL=svg.js.map
