@@ -41,4 +41,6 @@ export declare class SVGRenderer {
 }
 export declare function _wrap_horizontal_text(text: string, chars_per_line: number): string[];
 export declare function _vertical_glyph_offset(ch: string, font_size: number): [number, number];
+/** Whether a character should be rotated 90° when drawn in vertical text. */
+export declare function _vertical_glyph_rotate(ch: string): boolean;
 //# sourceMappingURL=svg.d.ts.map

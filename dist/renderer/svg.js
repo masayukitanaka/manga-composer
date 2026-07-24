@@ -771,12 +771,22 @@ export class SVGRenderer {
         const line_h = font_size * 1.4;
         const inset_rect = new Rect(rect.x + padding, rect.y + padding, Math.max(0.0, rect.w - 2 * padding), Math.max(0.0, rect.h - 2 * padding));
         if (direction === "vertical") {
+            // Vertical text runs top→bottom, columns right→left. An explicit newline
+            // starts a new column; within a paragraph, wrap by how many glyphs fit in
+            // the column height. `\n` is a hard column break, never a rendered glyph.
             const chars_per_col = Math.max(1, Math.trunc(inset_rect.h / (font_size * 1.0)));
-            const colsArr = [];
-            for (let i = 0; i < text.length; i += chars_per_col) {
-                colsArr.push(text.slice(i, i + chars_per_col));
+            const cols = [];
+            for (const para of text.split("\n")) {
+                if (para === "") {
+                    cols.push(""); // blank line = empty column (spacing)
+                    continue;
+                }
+                for (let i = 0; i < para.length; i += chars_per_col) {
+                    cols.push(para.slice(i, i + chars_per_col));
+                }
             }
-            const cols = colsArr.length > 0 ? colsArr : [text];
+            if (cols.length === 0)
+                cols.push(text);
             const block_w = cols.length * line_h;
             const col0_x = inset_rect.x + inset_rect.w / 2 + block_w / 2 - line_h / 2;
             const col_len = cols.reduce((m, c) => Math.max(m, c.length), 0);
@@ -794,16 +804,22 @@ export class SVGRenderer {
                 for (let chi = 0; chi < col.length; chi++) {
                     const ch = col[chi];
                     const [gx, gy] = _vertical_glyph_offset(ch, font_size);
-                    parent
-                        .sub("text", {
-                        x: s(cx + gx),
-                        y: s(row0_y + chi * font_size + gy),
+                    const px = cx + gx;
+                    const py = row0_y + chi * font_size + gy;
+                    const glyphAttrs = {
+                        x: s(px),
+                        y: s(py),
                         "text-anchor": "middle",
                         "font-size": s(font_size),
                         "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                         fill: color,
-                    })
-                        .setText(ch);
+                    };
+                    // Rotate horizontal glyphs (ー, dashes, brackets…) so they read as a
+                    // vertical stroke, centered on the glyph's position.
+                    if (_vertical_glyph_rotate(ch)) {
+                        glyphAttrs.transform = `rotate(90 ${s(px)} ${s(py - font_size * 0.3)})`;
+                    }
+                    parent.sub("text", glyphAttrs).setText(ch);
                 }
             }
             return;
@@ -870,15 +886,23 @@ export class SVGRenderer {
 }
 // ── text wrapping / vertical glyph helpers ──────────────────────────────────
 export function _wrap_horizontal_text(text, chars_per_line) {
-    if (!text.trim().includes(" ")) {
-        const out = [];
-        for (let i = 0; i < text.length; i += chars_per_line) {
-            out.push(text.slice(i, i + chars_per_line));
-        }
-        return out.length > 0 ? out : [text];
-    }
     const lines = [];
+    // Explicit newlines are hard breaks, always honored — split into paragraphs
+    // first, then wrap each. (Previously `\n` was ignored for space-less text,
+    // e.g. Japanese, so manual line breaks had no effect.)
     for (const para of text.split("\n")) {
+        if (para === "") {
+            lines.push(""); // blank line = empty line (spacing)
+            continue;
+        }
+        // No spaces (CJK): wrap purely by character count.
+        if (!para.includes(" ")) {
+            for (let i = 0; i < para.length; i += chars_per_line) {
+                lines.push(para.slice(i, i + chars_per_line));
+            }
+            continue;
+        }
+        // Word wrap for space-separated text.
         const words = para.split(" ");
         let current = "";
         for (let word of words) {
@@ -912,5 +936,26 @@ export function _vertical_glyph_offset(ch, font_size) {
         return [rx * font_size, ry * font_size];
     }
     return [0.0, 0.0];
+}
+/**
+ * Characters that must be rotated 90° clockwise when set vertically, so a
+ * horizontal glyph (long-vowel mark, dashes, brackets, wave dash…) reads as a
+ * vertical stroke. Matches the common set browsers rotate for `text-orientation:
+ * upright` exceptions / vertical CJK typesetting.
+ */
+const _VERTICAL_ROTATE_GLYPHS = new Set([
+    "ー", // 長音符
+    "-", "‐", "‑", "–", "—", "―", // hyphen / dashes / horizontal bar
+    "…", // 中点省略はそのまま縦でも可だが横棒感が強いので回転
+    "～", "〜", "~", // wave dash / tilde
+    "(", ")", "（", "）",
+    "[", "]", "「", "」", "『", "』", "【", "】", "〔", "〕",
+    "{", "}", "｛", "｝",
+    "<", ">", "＜", "＞", "〈", "〉", "《", "》",
+    "=", "＝",
+]);
+/** Whether a character should be rotated 90° when drawn in vertical text. */
+export function _vertical_glyph_rotate(ch) {
+    return _VERTICAL_ROTATE_GLYPHS.has(ch);
 }
 //# sourceMappingURL=svg.js.map
