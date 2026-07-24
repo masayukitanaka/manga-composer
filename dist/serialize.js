@@ -16,7 +16,7 @@
  * hard-coded panel default), so a panel that merely inherited the page value is
  * not re-emitted as an explicit attribute.
  */
-import { defaultPageConfig, defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs, } from "./ast.js";
+import { defaultPageConfig, defaultPanelAttrs, defaultImageLayer, defaultBalloonAttrs, defaultMonologueAttrs, } from "./ast.js";
 const INDENT = "  ";
 /** Serialize a parsed Page back to canonical .manga source text. */
 export function serialize(page) {
@@ -134,7 +134,8 @@ function containerAttrs(node, kind) {
 function emitPanel(node, depth, cfg, lines) {
     const pad = INDENT.repeat(depth);
     const attrs = panelAttrLines(node.attrs, cfg);
-    if (attrs.length === 0 && node.speeches.length === 0) {
+    const wantImagesBlock = node.attrs.image === null && node.attrs.imageLayers.length > 0;
+    if (attrs.length === 0 && node.speeches.length === 0 && !wantImagesBlock) {
         // Minimal form: `panel id`
         lines.push(`${pad}panel ${node.id}`);
         return;
@@ -142,9 +143,49 @@ function emitPanel(node, depth, cfg, lines) {
     lines.push(`${pad}panel ${node.id} {`);
     for (const a of attrs)
         lines.push(pad + INDENT + a);
+    // An `images { }` block round-trips only when it wasn't the `image:` sugar
+    // (in the sugar case `attrs.image` is set and panelAttrLines emits `image:`).
+    if (wantImagesBlock)
+        emitImagesBlock(node.attrs.imageLayers, depth + 1, lines);
     for (const sp of node.speeches)
         emitSpeech(sp, depth + 1, lines);
     lines.push(pad + "}");
+}
+/** Emit an `images { ... }` block (multi-layer / placement form). */
+function emitImagesBlock(layers, depth, lines) {
+    const pad = INDENT.repeat(depth);
+    lines.push(`${pad}images {`);
+    for (const layer of layers) {
+        lines.push(pad + INDENT + `{ ${imageLayerAttrs(layer).join(" ")} }`);
+    }
+    lines.push(pad + "}");
+}
+/** Attribute tokens for one image layer, path first, defaults omitted. */
+function imageLayerAttrs(layer) {
+    const d = defaultImageLayer(layer.path);
+    const out = [`path: ${str(layer.path)}`];
+    if (layer.imageFit !== d.imageFit)
+        out.push(`image_fit: ${layer.imageFit}`);
+    if (layer.anchorPos !== d.anchorPos)
+        out.push(`anchor_pos: ${layer.anchorPos}`);
+    if (layer.x !== null)
+        out.push(`x: ${length(layer.x)}`);
+    if (layer.y !== null)
+        out.push(`y: ${length(layer.y)}`);
+    if (layer.width !== null)
+        out.push(`width: ${length(layer.width)}`);
+    if (layer.height !== null)
+        out.push(`height: ${length(layer.height)}`);
+    if (!lengthEq(layer.dx, d.dx))
+        out.push(`dx: ${length(layer.dx)}`);
+    if (!lengthEq(layer.dy, d.dy))
+        out.push(`dy: ${length(layer.dy)}`);
+    if (layer.clip !== d.clip)
+        out.push(`clip: ${layer.clip}`);
+    return out;
+}
+function lengthEq(a, b) {
+    return a.value === b.value && a.unit === b.unit;
 }
 function panelAttrLines(a, cfg) {
     const d = defaultPanelAttrs();
@@ -160,6 +201,8 @@ function panelAttrLines(a, cfg) {
         out.push(`image: ${str(a.image)}`);
     if (a.imageFit !== d.imageFit)
         out.push(`image_fit: ${a.imageFit}`);
+    if (a.imageClip !== d.imageClip)
+        out.push(`image_clip: ${a.imageClip}`);
     if (a.label !== d.label)
         out.push(`label: ${str(a.label)}`);
     if (a.text !== d.text)

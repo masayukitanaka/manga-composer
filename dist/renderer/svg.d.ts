@@ -33,7 +33,15 @@ export declare class SVGRenderer {
     private _render_panel;
     private _render_rect_panel;
     private _render_skewed_panel;
-    private _render_image;
+    /**
+     * Draw a panel's image layers back-to-front (array order = bottom→top; SVG's
+     * later-wins painting matches). Each layer fits into its own placement rect
+     * (resolveImageLayerRect); a layer with no placement attrs fills the panel,
+     * matching the legacy single-`image` behavior. A missing/failing layer draws
+     * its own placeholder so the other layers still render.
+     */
+    private _render_image_layers;
+    private _render_one_image_layer;
     private _render_text;
     _draw_text_block(parent: XmlElement, rect: Rect, text: string, font_size: number, direction: string, color: string, align?: string, padding?: number): void;
     private _render_speech;

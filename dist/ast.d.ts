@@ -53,11 +53,26 @@ export interface PageConfig {
     borderColor: string;
 }
 export declare function defaultPageConfig(): PageConfig;
+export interface ImageLayer {
+    path: string;
+    imageFit: ImageFit | null;
+    anchorPos: AnchorPos;
+    x: Length | null;
+    y: Length | null;
+    width: Length | null;
+    height: Length | null;
+    dx: Length;
+    dy: Length;
+    clip: boolean | null;
+}
+export declare function defaultImageLayer(path: string, imageFit?: ImageFit | null): ImageLayer;
 export interface PanelAttrs {
     importance: Importance;
     zIndex: number | null;
     image: string | null;
     imageFit: ImageFit;
+    imageClip: boolean;
+    imageLayers: ImageLayer[];
     label: string | null;
     text: string | null;
     textDirection: TextDirection;
@@ -173,6 +188,7 @@ export type AttrValueType = "int" | "float" | "string" | "passthrough";
 export declare const PANEL_ATTR_TYPES: Record<string, AttrValueType>;
 export declare const PAGE_ATTR_KEYS: ReadonlySet<string>;
 export declare const PANEL_ATTR_KEYS: ReadonlySet<string>;
+export declare const IMAGE_LAYER_ATTR_KEYS: ReadonlySet<string>;
 export declare const BALLOON_ATTR_KEYS: ReadonlySet<string>;
 export declare const MONOLOGUE_ATTR_KEYS: ReadonlySet<string>;
 //# sourceMappingURL=ast.d.ts.map

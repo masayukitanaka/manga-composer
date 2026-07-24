@@ -8,7 +8,7 @@
  * bug-fragile and any "cleanup" risks changing float rounding or branch order
  * in ways that surface as a subtly-misplaced corner in one example.
  */
-import { type Page, type PanelAttrs, type SpeechNode, type BalloonAttrs, type MonologueAttrs } from "../ast.js";
+import { type Page, type PanelAttrs, type ImageLayer, type SpeechNode, type BalloonAttrs, type MonologueAttrs } from "../ast.js";
 export declare class Rect {
     x: number;
     y: number;
@@ -81,6 +81,16 @@ export declare class LayoutedSpeech {
     constructor(kind: string, // "balloon" | "monologue"
     id: string | null, rect: Rect, attrs: BalloonAttrs | MonologueAttrs, has_tail?: boolean);
 }
+/**
+ * Resolve one image layer's placement rect against its owning panel's rect.
+ * Mirrors balloon anchor placement (_ANCHOR_POS_POINTS growth direction) but
+ * panel-relative, with %/mm lengths and no `margin`. See .private/IMAGE_LAYERS.md.
+ *
+ * `%` resolves against the panel dimension of the same axis: width-axis fields
+ * (x/width/dx) → r.w, height-axis fields (y/height/dy) → r.h. Layers with no
+ * placement attrs resolve to the panel rect itself (full-bleed = legacy image).
+ */
+export declare function resolveImageLayerRect(layer: ImageLayer, r: Rect): Rect;
 export declare const TEXT_CHAR_W_FACTOR = 1;
 export declare const TEXT_LINE_H_FACTOR = 1.4;
 /** Rough width/height estimate (mm) for a text block. */

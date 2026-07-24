@@ -14,8 +14,13 @@
  * (docs/PORTING_NOTES.md).
  */
 
-import type { Page } from "../ast.js";
-import { Rect, LayoutedPanel, LayoutedSpeech } from "../layout/slicing.js";
+import type { Page, ImageLayer } from "../ast.js";
+import {
+  Rect,
+  LayoutedPanel,
+  LayoutedSpeech,
+  resolveImageLayerRect,
+} from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import { renderBalloon } from "./balloonOutline.js";
 import type { ImageLoader } from "./imageLoader.js";
@@ -263,7 +268,7 @@ export class SVGRenderer {
       this._render_rect_panel(g, gb, panel, r);
     }
 
-    if (attrs.image) this._render_image(g, panel);
+    if (attrs.imageLayers.length > 0) this._render_image_layers(g, panel, defs);
     if (attrs.text) this._render_text(g, panel);
 
     if (attrs.label !== null) {
@@ -778,19 +783,57 @@ export class SVGRenderer {
     }
   }
 
-  private _render_image(parent: XmlElement, panel: LayoutedPanel): void {
-    const r = panel.rect;
-    const attrs = panel.attrs;
-    if (!attrs.image) return;
+  /**
+   * Draw a panel's image layers back-to-front (array order = bottom→top; SVG's
+   * later-wins painting matches). Each layer fits into its own placement rect
+   * (resolveImageLayerRect); a layer with no placement attrs fills the panel,
+   * matching the legacy single-`image` behavior. A missing/failing layer draws
+   * its own placeholder so the other layers still render.
+   */
+  private _render_image_layers(
+    parent: XmlElement,
+    panel: LayoutedPanel,
+    defs: XmlElement | null,
+  ): void {
+    // A single clipPath (= the panel rect) shared by every clipped layer of
+    // this panel; created lazily so panels with no clipped layer add nothing.
+    let clip_ref: string | null = null;
+    const ensureClip = (): string | null => {
+      if (defs === null) return null;
+      if (clip_ref === null) {
+        const clip_id = `clip_imgs_${panel.id}`;
+        const cp = defs.sub("clipPath", { id: clip_id });
+        const r = panel.rect;
+        cp.sub("rect", { x: s(r.x), y: s(r.y), width: s(r.w), height: s(r.h) });
+        clip_ref = `url(#${clip_id})`;
+      }
+      return clip_ref;
+    };
 
+    for (const layer of panel.attrs.imageLayers) {
+      const box = resolveImageLayerRect(layer, panel.rect);
+      // Effective clip: layer.clip overrides the panel default (imageClip).
+      const clip = layer.clip ?? panel.attrs.imageClip;
+      const clip_path = clip ? ensureClip() : null;
+      this._render_one_image_layer(parent, panel, layer, box, clip_path);
+    }
+  }
+
+  private _render_one_image_layer(
+    parent: XmlElement,
+    panel: LayoutedPanel,
+    layer: ImageLayer,
+    box: Rect,
+    clip_path: string | null,
+  ): void {
     let loaded = null;
     try {
-      loaded = this.imageLoader ? this.imageLoader(attrs.image) : null;
+      loaded = this.imageLoader ? this.imageLoader(layer.path) : null;
     } catch (e) {
       parent
         .sub("text", {
-          x: s(r.x + r.w / 2),
-          y: s(r.y + r.h / 2),
+          x: s(box.x + box.w / 2),
+          y: s(box.y + box.h / 2),
           "text-anchor": "middle",
           "dominant-baseline": "middle",
           "font-size": "3",
@@ -802,25 +845,26 @@ export class SVGRenderer {
     }
 
     if (loaded === null) {
-      parent.sub("rect", {
-        x: s(r.x),
-        y: s(r.y),
-        width: s(r.w),
-        height: s(r.h),
+      const ph = parent.sub("rect", {
+        x: s(box.x),
+        y: s(box.y),
+        width: s(box.w),
+        height: s(box.h),
         fill: "#cccccc",
         opacity: "0.3",
       });
+      if (clip_path !== null) ph.set("clip-path", clip_path);
       parent
         .sub("text", {
-          x: s(r.x + r.w / 2),
-          y: s(r.y + r.h / 2),
+          x: s(box.x + box.w / 2),
+          y: s(box.y + box.h / 2),
           "text-anchor": "middle",
           "dominant-baseline": "middle",
           "font-size": "3",
           "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
           fill: "#666666",
         })
-        .setText(`Image not found: ${attrs.image}`);
+        .setText(`Image not found: ${layer.path}`);
       return;
     }
 
@@ -829,16 +873,19 @@ export class SVGRenderer {
       contain: "xMidYMid meet",
       fill: "none",
     };
-    const aspect_ratio = aspect_ratio_map[attrs.imageFit] ?? "xMidYMid slice";
+    // Layer fit, else panel fit, else "cover".
+    const fit = layer.imageFit ?? panel.attrs.imageFit ?? "cover";
+    const aspect_ratio = aspect_ratio_map[fit] ?? "xMidYMid slice";
 
-    parent.sub("image", {
-      x: s(r.x),
-      y: s(r.y),
-      width: s(r.w),
-      height: s(r.h),
+    const img = parent.sub("image", {
+      x: s(box.x),
+      y: s(box.y),
+      width: s(box.w),
+      height: s(box.h),
       href: `data:${loaded.mime};base64,${loaded.dataBase64}`,
       preserveAspectRatio: aspect_ratio,
     });
+    if (clip_path !== null) img.set("clip-path", clip_path);
   }
 
   private _render_text(parent: XmlElement, panel: LayoutedPanel): void {

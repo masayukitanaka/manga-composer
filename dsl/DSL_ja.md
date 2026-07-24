@@ -230,8 +230,9 @@ panel quiet {
 | `importance` | `1` \| `2` \| `3` | `2` | 重要度（1が最重要）。重なり順の既定値にも使われる |
 | `z_index` | int（負も可） | なし | 重なり順（大きいほど前面）。省略時は importance から導出（1→+1, 2→0, 3→-1） |
 | `label` | string | なし | パネル内に表示するラベル。省略時は非表示。空文字列 `""` 指定でパネルIDを表示 |
-| `image` | string (path) | なし | パネル内画像のパス |
+| `image` | string (path) | なし | パネル内画像のパス（1枚）。複数枚を重ねる場合は `images { ... }` ブロックを使う（後述） |
 | `image_fit` | `cover` \| `contain` \| `fill` | `cover` | 画像の収め方 |
+| `image_clip` | `true` \| `false` | `true` | このパネルの画像レイヤーの `clip` 既定値（各レイヤーの `clip` が優先）。`true` = レイヤーをパネル矩形で切り落とす |
 | `text` | string | なし | パネル内テキスト |
 | `text_direction` | `horizontal` \| `vertical` | `horizontal` | 文字方向 |
 | `border` | number (mm) | `1` | 枠線の太さ（全辺共通） |
@@ -288,6 +289,69 @@ panel p2 {
 panel p3 {
   image: "texture.png"
   image_fit: fill
+}
+```
+
+#### 複数画像（画像レイヤー）
+
+`images { ... }` ブロックを使うと、1つのパネルに複数の画像を重ねられます。背景と
+キャラクターを別々に生成・編集する用途に便利です。各レイヤーは `{ ... }` ブロックで書き、
+**記述順に下から上へ重なります（最初＝最背面／背景、後＝前面）。**
+
+```manga
+panel scene {
+  images {
+    { "bg/room.png"   image_fit: cover }                    // 下（背景）
+    { "char/hero.png" image_fit: contain                    // 手前（キャラ）
+      width: 60% height: 90% anchor_pos: bottom_right }
+  }
+}
+```
+
+単一の `image:` 属性は1レイヤーのブロック（`images { { "x.png" } }`）と等価なので、既存ファイルは
+そのまま動きます。同じパネルに `image:` と `images { }` の両方は書けません。
+
+**レイヤーのパス記法** — パスは先頭の裸の文字列か、明示的な `path:` キーで指定できます:
+
+```manga
+images {
+  { "a.png" }                     // 裸の文字列 = path
+  { path: "b.png" }               // 明示的な path キー
+  { "c.png" image_fit: fill }     // 裸の文字列 + 属性
+}
+```
+
+**レイヤー属性:**
+
+| 属性 | 型 | デフォルト | 説明 |
+|---|---|---|---|
+| `path` | string（必須） | — | 画像パス（`.manga` からの相対）。先頭の裸の文字列でも可 |
+| `image_fit` | `cover` \| `contain` \| `fill` | パネルの `image_fit`（さらに未指定なら `cover`） | 配置矩形の中での画像の収め方 |
+| `width` | `<n>%` \| `<n>mm` | `100%` | 配置矩形の幅。`%` は**パネル**幅基準 |
+| `height` | `<n>%` \| `<n>mm` | `100%` | 配置矩形の高さ。`%` は**パネル**高さ基準 |
+| `anchor_pos` | `top_left` \| `top_right` \| `bottom_left` \| `bottom_right` \| `center` \| `top` \| `bottom` \| `left` \| `right` | `center` | 配置矩形をパネルのどの角/辺に寄せるか（balloon の `anchor_pos` と同じ意味） |
+| `x` | `<n>%` \| `<n>mm` | なし | 配置矩形左上の X。**パネル相対**（原点＝パネル左上）。X軸だけ `anchor_pos` を上書き |
+| `y` | `<n>%` \| `<n>mm` | なし | 配置矩形左上の Y（パネル相対）。Y軸だけ `anchor_pos` を上書き |
+| `dx`, `dy` | `<n>%` \| `<n>mm` | `0` | 配置後にさらにずらす微調整オフセット |
+| `clip` | `true` \| `false` | パネルの `image_clip`（さらに未指定なら `true`） | このレイヤーをパネル矩形で切り落とすか（後述） |
+
+位置・サイズの考え方は balloon の `x`/`y`/`width`/`height`/`anchor_pos`/`dx`/`dy` と同じですが、
+**パネル相対かつ `%` がデフォルト単位**（パネル自身のサイズ基準）です。`mm` も指定可能で、
+`px`/`pt` は非対応。位置・サイズ属性を一切指定しないレイヤーはパネル全面に敷かれ、従来の
+単一 `image` と同じ挙動になります。
+
+**クリップ（コマ枠を破る演出）.** デフォルト（`clip: true`）ではレイヤーを所属パネルの矩形で
+切り落とすため、端に寄せたキャラクターがガター（コマ間）へはみ出す事故を防げます。レイヤーに
+`clip: false` を指定するとそのレイヤーだけコマ枠を破ってはみ出せます（キャラを枠から突き出す演出）。
+パネルに `image_clip: false` を指定すると、そのパネルの全レイヤーの既定を反転できます。
+
+```manga
+panel scene {
+  images {
+    { "bg.png" image_fit: cover }                 // 背景：パネル全面
+    { "char.png" x: 70% width: 40% }              // はみ出す → デフォルトで切り落とし
+    { "fx.png"  x: 80% width: 50% clip: false }   // この効果線だけコマ枠を破って張り出す
+  }
 }
 ```
 

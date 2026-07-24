@@ -59,12 +59,28 @@ export function defaultPageConfig() {
         borderColor: "#000000",
     };
 }
+export function defaultImageLayer(path, imageFit = null) {
+    return {
+        path,
+        imageFit,
+        anchorPos: "center",
+        x: null,
+        y: null,
+        width: null,
+        height: null,
+        dx: { value: 0, unit: "mm" },
+        dy: { value: 0, unit: "mm" },
+        clip: null,
+    };
+}
 export function defaultPanelAttrs() {
     return {
         importance: 2,
         zIndex: null,
         image: null,
         imageFit: "cover",
+        imageClip: true,
+        imageLayers: [],
         label: null,
         text: null,
         textDirection: "horizontal",
@@ -178,6 +194,7 @@ export const PANEL_ATTR_TYPES = {
     text_color: "string",
     // passthrough (enum): str(value)
     image_fit: "passthrough",
+    image_clip: "passthrough",
     text_direction: "passthrough",
     anchor_pos: "passthrough",
     align: "passthrough",
@@ -208,6 +225,7 @@ export const PANEL_ATTR_KEYS = new Set([
     "z_index",
     "image",
     "image_fit",
+    "image_clip",
     "label",
     "text",
     "text_direction",
@@ -226,6 +244,20 @@ export const PANEL_ATTR_KEYS = new Set([
     "offset_bottom",
     "offset_left",
     "offset_right",
+]);
+// Attribute keys allowed inside one image layer `{ ... }`. `path` may also be
+// given as a bare leading string. See .private/IMAGE_LAYERS.md §2.3.
+export const IMAGE_LAYER_ATTR_KEYS = new Set([
+    "path",
+    "image_fit",
+    "anchor_pos",
+    "x",
+    "y",
+    "width",
+    "height",
+    "dx",
+    "dy",
+    "clip",
 ]);
 export const BALLOON_ATTR_KEYS = new Set([
     // shared SpeechAttrs

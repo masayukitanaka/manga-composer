@@ -16,6 +16,7 @@ import {
   type ColNode,
   type Length,
   type PanelAttrs,
+  type ImageLayer,
   type SpeechNode,
   type BalloonAttrs,
   type MonologueAttrs,
@@ -137,6 +138,47 @@ const _ANCHOR_POS_POINTS: Record<
   left: (r) => [r.x, r.y + r.h / 2, 1, 0],
   right: (r) => [r.x + r.w, r.y + r.h / 2, -1, 0],
 };
+
+/**
+ * Resolve one image layer's placement rect against its owning panel's rect.
+ * Mirrors balloon anchor placement (_ANCHOR_POS_POINTS growth direction) but
+ * panel-relative, with %/mm lengths and no `margin`. See .private/IMAGE_LAYERS.md.
+ *
+ * `%` resolves against the panel dimension of the same axis: width-axis fields
+ * (x/width/dx) → r.w, height-axis fields (y/height/dy) → r.h. Layers with no
+ * placement attrs resolve to the panel rect itself (full-bleed = legacy image).
+ */
+export function resolveImageLayerRect(layer: ImageLayer, r: Rect): Rect {
+  const wLen = (l: Length | null, fallback: number): number =>
+    l === null ? fallback : l.unit === "%" ? (l.value * r.w) / 100 : l.value;
+  const hLen = (l: Length | null, fallback: number): number =>
+    l === null ? fallback : l.unit === "%" ? (l.value * r.h) / 100 : l.value;
+
+  const width = wLen(layer.width, r.w);
+  const height = hLen(layer.height, r.h);
+
+  const point_fn = _ANCHOR_POS_POINTS[layer.anchorPos] ?? _ANCHOR_POS_POINTS.center;
+  const [base_x, base_y, gx, gy] = point_fn(r);
+
+  let x: number;
+  let y: number;
+  if (gx === -1) x = base_x - width;
+  else if (gx === 0) x = base_x - width / 2;
+  else x = base_x;
+  if (gy === -1) y = base_y - height;
+  else if (gy === 0) y = base_y - height / 2;
+  else y = base_y;
+
+  // x/y are panel-relative (origin = panel top-left), independent per-axis
+  // overrides of anchor_pos.
+  if (layer.x !== null) x = r.x + (layer.x.unit === "%" ? (layer.x.value * r.w) / 100 : layer.x.value);
+  if (layer.y !== null) y = r.y + (layer.y.unit === "%" ? (layer.y.value * r.h) / 100 : layer.y.value);
+
+  x += layer.dx.unit === "%" ? (layer.dx.value * r.w) / 100 : layer.dx.value;
+  y += layer.dy.unit === "%" ? (layer.dy.value * r.h) / 100 : layer.dy.value;
+
+  return new Rect(x, y, width, height);
+}
 
 const _DEFAULT_SPEECH_W = 30.0;
 const _DEFAULT_SPEECH_H = 15.0;

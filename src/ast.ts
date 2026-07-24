@@ -122,11 +122,59 @@ export function defaultPageConfig(): PageConfig {
 
 // ── PanelAttrs ──────────────────────────────────────────────────────────────
 
+// ── ImageLayer ──────────────────────────────────────────────────────────────
+//
+// One image in a panel's `images { ... }` block (or the normalized form of a
+// single `image:` attribute). Layers stack in document order: the first is
+// drawn at the back (background), later ones in front. See
+// .private/IMAGE_LAYERS.md.
+//
+// Placement mirrors balloon's x/y/width/height/anchor_pos/dx/dy, but is
+// panel-relative and defaults to `%` units (of the owning panel's rect).
+// null on a placement field = default (width/height = 100%, anchorPos = center,
+// x/y = follow anchorPos, dx/dy = 0).
+export interface ImageLayer {
+  path: string;
+  imageFit: ImageFit | null; // null = inherit panel imageFit (then "cover")
+  anchorPos: AnchorPos;
+  x: Length | null; // panel-relative top-left X; overrides anchorPos on X axis
+  y: Length | null;
+  width: Length | null; // placement box width; null = 100% of panel
+  height: Length | null;
+  dx: Length; // fine-tuning offset (default 0mm)
+  dy: Length;
+  // Clip this layer to the owning panel's rect. null = inherit the panel's
+  // `image_clip` (which defaults to true). Set false to let the image bleed
+  // out past the panel border (character-breaking-the-frame effect).
+  clip: boolean | null;
+}
+
+export function defaultImageLayer(path: string, imageFit: ImageFit | null = null): ImageLayer {
+  return {
+    path,
+    imageFit,
+    anchorPos: "center",
+    x: null,
+    y: null,
+    width: null,
+    height: null,
+    dx: { value: 0, unit: "mm" },
+    dy: { value: 0, unit: "mm" },
+    clip: null,
+  };
+}
+
 export interface PanelAttrs {
   importance: Importance;
   zIndex: number | null;
   image: string | null;
   imageFit: ImageFit;
+  // Default clip behavior for this panel's image layers (a layer's own `clip`
+  // overrides it). True = clip layers to the panel rect (default).
+  imageClip: boolean;
+  // Normalized image layers (rendering reads THIS, not `image`). A single
+  // `image:` attribute is folded into a one-element array by the parser.
+  imageLayers: ImageLayer[];
   label: string | null;
   text: string | null;
   textDirection: TextDirection;
@@ -156,6 +204,8 @@ export function defaultPanelAttrs(): PanelAttrs {
     zIndex: null,
     image: null,
     imageFit: "cover",
+    imageClip: true,
+    imageLayers: [],
     label: null,
     text: null,
     textDirection: "horizontal",
@@ -389,6 +439,7 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   text_color: "string",
   // passthrough (enum): str(value)
   image_fit: "passthrough",
+  image_clip: "passthrough",
   text_direction: "passthrough",
   anchor_pos: "passthrough",
   align: "passthrough",
@@ -422,6 +473,7 @@ export const PANEL_ATTR_KEYS: ReadonlySet<string> = new Set([
   "z_index",
   "image",
   "image_fit",
+  "image_clip",
   "label",
   "text",
   "text_direction",
@@ -440,6 +492,21 @@ export const PANEL_ATTR_KEYS: ReadonlySet<string> = new Set([
   "offset_bottom",
   "offset_left",
   "offset_right",
+]);
+
+// Attribute keys allowed inside one image layer `{ ... }`. `path` may also be
+// given as a bare leading string. See .private/IMAGE_LAYERS.md §2.3.
+export const IMAGE_LAYER_ATTR_KEYS: ReadonlySet<string> = new Set([
+  "path",
+  "image_fit",
+  "anchor_pos",
+  "x",
+  "y",
+  "width",
+  "height",
+  "dx",
+  "dy",
+  "clip",
 ]);
 
 export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([

@@ -49,11 +49,37 @@ form:
 npm install -g https://github.com/masayukitanaka/manga-composer/archive/refs/heads/main.tar.gz
 ```
 
-Run it once without a global install:
+### Run from a local checkout (no install, no GitHub)
+
+If you already have the package source on disk — a clone of this repo, or a copy
+in your workspace — you can run the CLI directly against those local files
+without installing the package or fetching anything from GitHub. From the
+package directory:
 
 ```bash
-npx github:masayukitanaka/manga-composer input.manga -o output.svg
+npm install    # one-time: fetches dev dependencies (tsx, typescript)
 ```
+
+Then run the CLI straight from the TypeScript source via `tsx` — no build step:
+
+```bash
+# via the package script (everything after `--` goes to the CLI)
+npm run cli -- input.manga -o output.svg
+
+# or invoke tsx on the entry point directly
+npx tsx src/cli.ts input.manga -o output.svg
+```
+
+Prefer to run the compiled output instead? Build once, then run the local
+`bin`:
+
+```bash
+npm run build
+node bin/manga-composer.js input.manga -o output.svg
+```
+
+All of these accept the same options as the installed command (`--format`,
+`--dpi`, …).
 
 Add it as a dependency of a project (for use as a library):
 

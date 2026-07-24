@@ -221,8 +221,9 @@ panel quiet {
 |------|-----|-----------|------|
 | `importance` | `1` \| `2` \| `3` | `2` | Importance (1 is most important). Also used as the default stacking order |
 | `z_index` | int (may be negative) | none | Stacking order (higher = front). When omitted, derived from importance (1→+1, 2→0, 3→-1) |
-| `image` | string (path) | none | Path to image within panel |
+| `image` | string (path) | none | Path to a single image within the panel. For multiple layered images, use an `images { ... }` block instead (see below) |
 | `image_fit` | `cover` \| `contain` \| `fill` | `cover` | How to fit the image |
+| `image_clip` | `true` \| `false` | `true` | Default clip behavior for this panel's image layers (a layer's own `clip` overrides it). `true` = clip layers to the panel rect |
 | `text` | string | none | Text within panel |
 | `text_direction` | `horizontal` \| `vertical` | `horizontal` | Text direction |
 | `border` | number (mm) | `1` | Border thickness (all sides) |
@@ -279,6 +280,73 @@ panel p2 {
 panel p3 {
   image: "texture.png"
   image_fit: fill
+}
+```
+
+#### Multiple Images (Image Layers)
+
+A panel can stack several images with an `images { ... }` block — useful for
+compositing a background and one or more characters that you generate and edit
+separately. Each layer is a `{ ... }` block. **Layers stack in document order:
+the first is drawn at the back (background), later ones in front.**
+
+```manga
+panel scene {
+  images {
+    { "bg/room.png"   image_fit: cover }                    // back: background
+    { "char/hero.png" image_fit: contain                    // front: character
+      width: 60% height: 90% anchor_pos: bottom_right }
+  }
+}
+```
+
+The single `image:` attribute is exactly equivalent to a one-layer block
+(`images { { "x.png" } }`), so existing files keep working. You cannot set both
+`image:` and `images { }` on the same panel.
+
+**Layer path forms** — the path may be a bare leading string or an explicit
+`path:` key:
+
+```manga
+images {
+  { "a.png" }                     // bare string = path
+  { path: "b.png" }               // explicit path key
+  { "c.png" image_fit: fill }     // bare string + attributes
+}
+```
+
+**Layer attributes:**
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `path` | string (required) | — | Image path (relative to the `.manga` file). May be given as a bare leading string |
+| `image_fit` | `cover` \| `contain` \| `fill` | the panel's `image_fit` (then `cover`) | How the image fits inside its placement box |
+| `width` | `<n>%` \| `<n>mm` | `100%` | Placement box width. `%` is relative to the **panel** width |
+| `height` | `<n>%` \| `<n>mm` | `100%` | Placement box height. `%` is relative to the **panel** height |
+| `anchor_pos` | `top_left` \| `top_right` \| `bottom_left` \| `bottom_right` \| `center` \| `top` \| `bottom` \| `left` \| `right` | `center` | Which corner/edge of the panel the box is aligned to (same meaning as a balloon's `anchor_pos`) |
+| `x` | `<n>%` \| `<n>mm` | none | Box top-left X, **panel-relative** (origin = panel top-left). Overrides `anchor_pos` on the X axis only |
+| `y` | `<n>%` \| `<n>mm` | none | Box top-left Y, panel-relative. Overrides `anchor_pos` on the Y axis only |
+| `dx`, `dy` | `<n>%` \| `<n>mm` | `0` | Fine-tuning offset applied after placement |
+| `clip` | `true` \| `false` | the panel's `image_clip` (then `true`) | Clip this layer to the panel rect. See below |
+
+Position and size mirror a balloon's `x`/`y`/`width`/`height`/`anchor_pos`/`dx`/`dy`,
+but are **panel-relative and default to `%`** (of the panel's own size). `mm` is
+also accepted; `px`/`pt` are not. A layer with no position/size attributes fills
+the panel, matching the legacy single-`image` behavior.
+
+**Clipping (breaking out of the frame).** By default (`clip: true`) a layer is
+clipped to the owning panel's rect, so a character pushed to the edge cannot
+spill into the gutter. Set `clip: false` on a layer to let it bleed out past the
+panel border (a character breaking the frame), or set `image_clip: false` on the
+panel to flip the default for all of its layers.
+
+```manga
+panel scene {
+  images {
+    { "bg.png" image_fit: cover }                 // background: fills the panel
+    { "char.png" x: 70% width: 40% }              // overflows → clipped by default
+    { "fx.png"  x: 80% width: 50% clip: false }   // this one bleeds out of the frame
+  }
 }
 ```
 

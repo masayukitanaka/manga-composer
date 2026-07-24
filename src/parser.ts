@@ -39,6 +39,7 @@ import {
   type SpeechNode,
   type LayoutNode,
   type Length,
+  type ImageLayer,
   type Align,
   type Direction,
   type Importance,
@@ -48,12 +49,14 @@ import {
   type AnchorPos,
   defaultPageConfig,
   defaultPanelAttrs,
+  defaultImageLayer,
   defaultBalloonAttrs,
   defaultMonologueAttrs,
   PAGE_SIZES,
   PANEL_ATTR_TYPES,
   PAGE_ATTR_KEYS,
   PANEL_ATTR_KEYS,
+  IMAGE_LAYER_ATTR_KEYS,
   BALLOON_ATTR_KEYS,
   MONOLOGUE_ATTR_KEYS,
   DIRECTIONS,
@@ -117,6 +120,13 @@ function toFloat(text: string): number {
 /** Python int(float(value)) — accept "2.0", truncate toward zero. */
 function toInt(text: string): number {
   return Math.trunc(toFloat(text));
+}
+
+/** Coerce a DSL `true`/`false` identifier to a boolean. */
+function toBool(text: string, field: string): boolean {
+  if (text === "true") return true;
+  if (text === "false") return false;
+  throw new ParseError(`${field} must be true or false (got ${JSON.stringify(text)})`);
 }
 
 /** Strip a single pair of surrounding double quotes and unescape \" \\ \n. */
@@ -537,10 +547,11 @@ class Parser {
 
     let rawAttrs: Record<string, RawValue> = {};
     let speeches: SpeechNode[] = [];
+    let imagesBlock: ImageLayer[] | null = null;
 
     if (this.at("LBRACE")) {
       // Block form: "{" panel_body* "}"
-      [rawAttrs, speeches] = this.parsePanelDefBlock();
+      [rawAttrs, speeches, imagesBlock] = this.parsePanelDefBlock();
     } else if (this.atPanelInlineStart()) {
       // Inline form: panel_inline_attrs
       rawAttrs = this.parsePanelInlineAttrs();
@@ -548,6 +559,7 @@ class Parser {
     // else: minimal form `panel foo` with no def.
 
     const attrs = this.buildPanelAttrs(rawAttrs);
+    attrs.imageLayers = this.resolveImageLayers(rawAttrs, attrs, imagesBlock);
     const node: PanelNode = { kind: "panel", id: panelId, attrs, speeches };
 
     // Register for the page-default border/border_color merge (see parsePage)
@@ -571,24 +583,35 @@ class Parser {
     );
   }
 
-  /** panel_def block form: "{" panel_body* "}" -> (raw attrs, speeches) */
-  private parsePanelDefBlock(): [Record<string, RawValue>, SpeechNode[]] {
+  /**
+   * panel_def block form: "{" panel_body* "}"
+   * -> (raw attrs, speeches, image layers | null)
+   * The image-layer list is null when no `images` block appeared, so the
+   * caller can distinguish "no images block" from "empty images block".
+   */
+  private parsePanelDefBlock(): [Record<string, RawValue>, SpeechNode[], ImageLayer[] | null] {
     this.expect("LBRACE");
     const attrs: Record<string, RawValue> = {};
     const speeches: SpeechNode[] = [];
+    let imagesBlock: ImageLayer[] | null = null;
     while (!this.at("RBRACE") && !this.at("EOF")) {
-      // panel_body: panel_attr | balloon_stmt | monologue_stmt
+      // panel_body: panel_attr | images_block | balloon_stmt | monologue_stmt
       if (this.atKeyword("balloon")) {
         speeches.push(this.parseBalloonStmt());
       } else if (this.atKeyword("monologue")) {
         speeches.push(this.parseMonologueStmt());
+      } else if (this.atKeyword("images")) {
+        if (imagesBlock !== null) {
+          throw new ParseError("panel cannot have more than one `images` block");
+        }
+        imagesBlock = this.parseImagesBlock();
       } else {
         const [key, val] = this.parsePanelAttr();
         attrs[key] = val;
       }
     }
     this.expect("RBRACE");
-    return [attrs, speeches];
+    return [attrs, speeches, imagesBlock];
   }
 
   /** panel_inline_attrs: panel_attr ("," panel_attr)* */
@@ -615,6 +638,139 @@ class Parser {
     this.next();
     this.expect("COLON");
     return [keyTok.value, this.parseValue()];
+  }
+
+  // ── images block ──────────────────────────────────────────────────────
+
+  /**
+   * images_block: "images" "{" image_layer* "}"
+   * image_layer:  "{" (STRING | image_layer_attr)* "}"
+   * A leading bare STRING is sugar for `path:`. Returns the parsed layers in
+   * document order (first = back / background).
+   */
+  private parseImagesBlock(): ImageLayer[] {
+    this.expectKeyword("images");
+    this.expect("LBRACE");
+    const layers: ImageLayer[] = [];
+    while (!this.at("RBRACE") && !this.at("EOF")) {
+      layers.push(this.parseImageLayer());
+    }
+    this.expect("RBRACE");
+    return layers;
+  }
+
+  /** image_layer: "{" (STRING | CNAME ":" value)* "}" */
+  private parseImageLayer(): ImageLayer {
+    this.expect("LBRACE");
+    let barePath: string | null = null;
+    const raw: Record<string, RawValue> = {};
+    while (!this.at("RBRACE") && !this.at("EOF")) {
+      if (this.at("STRING")) {
+        // Leading bare string = path sugar.
+        if (barePath !== null) {
+          throw new ParseError("image layer has more than one bare path string");
+        }
+        if ("path" in raw) {
+          throw new ParseError("image layer specifies both a bare path and `path:`");
+        }
+        barePath = stripString(this.next().value);
+        continue;
+      }
+      const [key, val] = this.parsePanelAttr();
+      if (key === "path" && barePath !== null) {
+        throw new ParseError("image layer specifies both a bare path and `path:`");
+      }
+      raw[key] = val;
+    }
+    this.expect("RBRACE");
+
+    assertKnownKeys(raw, IMAGE_LAYER_ATTR_KEYS, "image layer");
+
+    // Resolve path (bare string or `path:`).
+    let path = barePath;
+    if ("path" in raw) {
+      const pv = raw.path;
+      path = pv.kind === "scalar" ? stripString(pv.text) : String(pv.length.value);
+    }
+    if (path === null || path === "") {
+      throw new ParseError("image layer requires a `path`");
+    }
+
+    const layer = defaultImageLayer(path);
+
+    if ("image_fit" in raw) {
+      const v = this.coerceScalar("image_fit", raw.image_fit);
+      layer.imageFit = assertLiteral<ImageFit>(v as string, IMAGE_FITS, "image_fit");
+    }
+    if ("anchor_pos" in raw) {
+      const v = raw.anchor_pos.kind === "scalar" ? raw.anchor_pos.text : "";
+      layer.anchorPos = assertLiteral<AnchorPos>(v, ANCHOR_POSITIONS, "anchor_pos");
+    }
+    if ("x" in raw) layer.x = this.imageLayerLength(raw.x, "x");
+    if ("y" in raw) layer.y = this.imageLayerLength(raw.y, "y");
+    if ("width" in raw) layer.width = this.imageLayerLength(raw.width, "width", true);
+    if ("height" in raw) layer.height = this.imageLayerLength(raw.height, "height", true);
+    if ("dx" in raw) layer.dx = this.imageLayerLength(raw.dx, "dx");
+    if ("dy" in raw) layer.dy = this.imageLayerLength(raw.dy, "dy");
+    if ("clip" in raw) {
+      const cv = raw.clip.kind === "scalar" ? raw.clip.text : String(raw.clip.length.value);
+      layer.clip = toBool(cv, "clip");
+    }
+
+    return layer;
+  }
+
+  /**
+   * Parse an image-layer length attribute. Only `%` and `mm` are allowed
+   * (px/pt make no sense for panel-relative placement). A bare number is
+   * treated as mm for convenience. `positive` requires value > 0.
+   */
+  private imageLayerLength(val: RawValue, field: string, positive = false): Length {
+    let len: Length;
+    if (val.kind === "length") {
+      len = val.length;
+    } else {
+      // scalar: either PERCENTAGE ("40%") or a bare NUMBER (→ mm).
+      const text = val.text;
+      if (text.endsWith("%")) {
+        len = { value: toFloat(text.replace(/%$/, "")), unit: "%" };
+      } else {
+        len = { value: toFloat(text), unit: "mm" };
+      }
+    }
+    if (len.unit !== "%" && len.unit !== "mm") {
+      throw new ParseError(
+        `image layer ${field} must use % or mm (got ${JSON.stringify(len.unit)})`,
+      );
+    }
+    if (positive && len.value <= 0) {
+      throw new ParseError(`image layer ${field} must be positive (got ${len.value})`);
+    }
+    return len;
+  }
+
+  /**
+   * Fold the panel's `image:` sugar and/or an `images { ... }` block into the
+   * normalized ImageLayer[]. Errors if both are given.
+   */
+  private resolveImageLayers(
+    raw: Record<string, RawValue>,
+    attrs: PanelAttrs,
+    imagesBlock: ImageLayer[] | null,
+  ): ImageLayer[] {
+    const hasImageAttr = "image" in raw;
+    if (hasImageAttr && imagesBlock !== null) {
+      throw new ParseError("panel cannot have both `image` and `images`");
+    }
+    if (imagesBlock !== null) return imagesBlock;
+    if (hasImageAttr && attrs.image !== null) {
+      // Sugar: a single full-bleed layer that inherits the panel's image_fit.
+      // Keep imageFit null (inherit) so this normalizes identically whether or
+      // not `image_fit:` was written — the panel's imageFit is the effective
+      // fit either way, and this keeps serialize round-trips stable.
+      return [defaultImageLayer(attrs.image, null)];
+    }
+    return [];
   }
 
   // ── balloon / monologue ───────────────────────────────────────────────
@@ -693,6 +849,9 @@ class Parser {
           break;
         case "image_fit":
           attrs.imageFit = assertLiteral<ImageFit>(v as string, IMAGE_FITS, "image_fit");
+          break;
+        case "image_clip":
+          attrs.imageClip = toBool(v as string, "image_clip");
           break;
         case "label":
           attrs.label = v as string;

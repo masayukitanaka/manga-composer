@@ -1,0 +1,44 @@
+page {
+  direction: rtl
+  gutter: 6
+  padding: 12
+  border: 0.3
+
+  col {
+    row {
+      panel p1 {
+        images {
+          {
+            "assets/farm_s.png"
+            image_fit: cover
+          }        
+          {
+            "assets/girl_s.png"
+            image_fit: contain
+          }
+        }
+      }
+    }
+    row {
+      panel panel_2 {
+        images {
+          {
+            "assets/farm_s.png"
+            image_fit: cover
+          }        
+          {
+            "assets/girl_s.png"
+            width: 20%
+            x: 20%
+            y: 40%
+          }        
+          {
+            "assets/girl_s.png"
+            width: 20%
+            x: 70%
+          }        
+        }
+      }
+    }
+  }
+}

@@ -40,11 +40,34 @@ npm install -g github:masayukitanaka/manga-composer
 npm install -g https://github.com/masayukitanaka/manga-composer/archive/refs/heads/main.tar.gz
 ```
 
-グローバルインストールせずに一度だけ実行:
+### ローカルのソースから実行する（インストール・GitHub 参照なし）
+
+すでに手元にパッケージのソースがある場合（このリポジトリのクローン、または
+ワークスペース内のコピー）、パッケージをインストールせず、GitHub から何も取得せずに、
+そのローカルファイルに対して直接 CLI を実行できます。パッケージのディレクトリで:
 
 ```bash
-npx github:masayukitanaka/manga-composer input.manga -o output.svg
+npm install    # 初回のみ: 開発依存（tsx, typescript）を取得
 ```
+
+あとは `tsx` 経由で TypeScript ソースから直接 CLI を実行できます（ビルド不要）:
+
+```bash
+# パッケージスクリプト経由（`--` 以降が CLI に渡される）
+npm run cli -- input.manga -o output.svg
+
+# または tsx でエントリポイントを直接実行
+npx tsx src/cli.ts input.manga -o output.svg
+```
+
+ビルド済みの成果物で実行したい場合は、一度ビルドしてからローカルの `bin` を実行します:
+
+```bash
+npm run build
+node bin/manga-composer.js input.manga -o output.svg
+```
+
+いずれもインストール済みコマンドと同じオプション（`--format`・`--dpi` など）を受け付けます。
 
 プロジェクトの依存として追加（ライブラリとして使う場合）:
 

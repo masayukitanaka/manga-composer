@@ -1,0 +1,52 @@
+// Multiple images per panel: a background laid down first, a character drawn
+// in front of it. Layers stack in document order — the first is at the back.
+// See .private/IMAGE_LAYERS.md.
+
+page {
+  size: B5
+  direction: rtl
+  gutter: 6
+
+  // A wide establishing panel: full-bleed background + a character placed in
+  // the lower-right, sized relative to the panel. The balloon sits on the
+  // opposite side so it doesn't collide with the character.
+  row height: 55% {
+    panel scene {
+      images {
+        { "assets/hometown.jpg" image_fit: cover }                // back: background
+        { path: "assets/boy.jpg"                                  // front: character
+          image_fit: contain
+          width: 45%
+          height: 85%
+          anchor_pos: bottom_right }
+      }
+
+      balloon {
+        anchor_pos: top_left
+        text: "帰ってきた……"
+        text_direction: vertical
+      }
+    }
+  }
+
+  // Same idea with the character nudged via dx/dy and pinned with x/y.
+  row {
+    col {
+      panel left {
+        images {
+          { "assets/hometown.jpg" image_fit: cover }
+          { path: "assets/n1.png" image_fit: contain width: 60% height: 60% anchor_pos: center }
+        }
+      }
+    }
+    col {
+      panel right {
+        // Single background, then a small character offset from the top-left.
+        images {
+          { "assets/hometown.jpg" image_fit: cover }
+          { "assets/m1.png" image_fit: contain width: 40% height: 55% anchor_pos: bottom_left dy: -3mm }
+        }
+      }
+    }
+  }
+}
