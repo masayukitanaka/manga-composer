@@ -14,11 +14,11 @@ import type { ImageLoader } from "./renderer/imageLoader.js";
 export * from "./errors.js";
 export { parse } from "./parser.js";
 export { serialize } from "./serialize.js";
-export { LayoutEngine } from "./layout/slicing.js";
+export { LayoutEngine, resolveImageLayerRect, Rect } from "./layout/slicing.js";
 export { SVGRenderer } from "./renderer/svg.js";
 export type { ImageLoader, LoadedImage } from "./renderer/imageLoader.js";
-export type { Page, PanelNode, RowNode, ColNode, LayoutNode, PanelAttrs, SpeechNode, BalloonNode, MonologueNode, BalloonAttrs, MonologueAttrs, BalloonShape, AnchorPos, } from "./ast.js";
-export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
+export type { Page, PanelNode, RowNode, ColNode, LayoutNode, PanelAttrs, SpeechNode, BalloonNode, MonologueNode, BalloonAttrs, MonologueAttrs, BalloonShape, AnchorPos, ImageLayer, ImageFit, Length, } from "./ast.js";
+export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs, defaultImageLayer, } from "./ast.js";
 /**
  * Compile .manga source to an SVG string, in the browser.
  * @param source .manga DSL source text

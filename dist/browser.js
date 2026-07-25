@@ -16,9 +16,9 @@ import { SVGRenderer } from "./renderer/svg.js";
 export * from "./errors.js";
 export { parse } from "./parser.js";
 export { serialize } from "./serialize.js";
-export { LayoutEngine } from "./layout/slicing.js";
+export { LayoutEngine, resolveImageLayerRect, Rect } from "./layout/slicing.js";
 export { SVGRenderer } from "./renderer/svg.js";
-export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
+export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs, defaultImageLayer, } from "./ast.js";
 /**
  * Compile .manga source to an SVG string, in the browser.
  * @param source .manga DSL source text
