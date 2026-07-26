@@ -50,7 +50,11 @@ page main_layout {
 | `size` | `A3` \| `A4` \| `B4` \| `B5` \| `<W>x<H>` | `A4` | Page size |
 | `direction` | `rtl` \| `ltr` | `ltr` | Reading order (right→left or left→right) |
 | `gutter` | number (mm) | `5` | Gap between panels |
-| `padding` | number (mm) | `10` | Page outer margin |
+| `padding` | number (mm) | `10` | Page outer margin (all four sides) |
+| `padding_top` | number (mm) | `padding` value | Top margin override (falls back to `padding`) |
+| `padding_bottom` | number (mm) | `padding` value | Bottom margin override |
+| `padding_left` | number (mm) | `padding` value | Left margin override |
+| `padding_right` | number (mm) | `padding` value | Right margin override |
 | `background` | color | `"#ffffff"` | Page background color |
 | `dpi` | number | `300` | Resolution for PNG output |
 | `border` | number (mm) | `1` | Default border thickness for all panels |

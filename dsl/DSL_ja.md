@@ -50,7 +50,11 @@ page main_layout {
 | `size` | `A3` \| `A4` \| `B4` \| `B5` \| `<W>x<H>` | `A4` | ページサイズ |
 | `direction` | `rtl` \| `ltr` | `ltr` | 読み順（右→左 or 左→右） |
 | `gutter` | number (mm) | `5` | パネル間の隙間 |
-| `padding` | number (mm) | `10` | ページ外周マージン |
+| `padding` | number (mm) | `10` | ページ外周マージン（上下左右一括） |
+| `padding_top` | number (mm) | `padding` の値 | 上マージンの個別指定（未指定なら `padding` を使用） |
+| `padding_bottom` | number (mm) | `padding` の値 | 下マージンの個別指定 |
+| `padding_left` | number (mm) | `padding` の値 | 左マージンの個別指定 |
+| `padding_right` | number (mm) | `padding` の値 | 右マージンの個別指定 |
 | `background` | color | `"#ffffff"` | ページ背景色 |
 | `dpi` | number | `300` | PNG出力時の解像度 |
 | `border` | number (mm) | `1` | 全パネルのデフォルト枠線の太さ |
