@@ -157,6 +157,10 @@ class Parser {
   // recursive-descent parser reads panels before the page's own attrs.
   private panelsNeedingBorder: PanelNode[] = [];
   private panelsNeedingBorderColor: PanelNode[] = [];
+  // Panel ids must be unique: they are the anchor everything addresses a panel
+  // by (layout maps, speech/image-layer owners, editor selection). Duplicates
+  // used to parse fine and then silently resolve to whichever panel came first.
+  private seenPanelIds = new Set<string>();
 
   constructor(source: string) {
     this.toks = tokenize(source);
@@ -549,6 +553,10 @@ class Parser {
     this.expectKeyword("panel");
     const idTok = this.expect("IDENT");
     const panelId = idTok.value;
+    if (this.seenPanelIds.has(panelId)) {
+      throw new ParseError(`duplicate panel id ${JSON.stringify(panelId)}`);
+    }
+    this.seenPanelIds.add(panelId);
 
     let rawAttrs: Record<string, RawValue> = {};
     let speeches: SpeechNode[] = [];

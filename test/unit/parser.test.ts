@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { parse } from "../../src/parser.js";
+import { ParseError } from "../../src/errors.js";
 import type { LayoutNode, PanelNode } from "../../src/ast.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -137,4 +138,30 @@ describe("parser", () => {
       expect(() => parseFile("examples", f), f).not.toThrow();
     }
   });
+
+  // Panel ids are the anchor everything addresses a panel by (layout maps,
+  // speech/image-layer owners, editor selection). Duplicates used to parse
+  // fine and then silently resolve to whichever panel came first.
+  describe("duplicate panel ids", () => {
+    it("rejects duplicates across separate containers", () => {
+      const src = `page {\n  row { panel p1 }\n  row { panel p1 }\n}`;
+      expect(() => parse(src)).toThrow(ParseError);
+      expect(() => parse(src)).toThrow(/duplicate panel id/);
+    });
+
+    it("rejects duplicates among siblings", () => {
+      expect(() => parse(`page {\n  row { panel a panel a }\n}`)).toThrow(/duplicate panel id/);
+    });
+
+    it("still accepts distinct ids", () => {
+      expect(() => parse(`page {\n  row { panel p1 }\n  row { panel p2 }\n}`)).not.toThrow();
+    });
+
+    it("does not leak seen ids between parse() calls", () => {
+      const src = `page { panel p1 }`;
+      expect(() => parse(src)).not.toThrow();
+      expect(() => parse(src)).not.toThrow();
+    });
+  });
+
 });

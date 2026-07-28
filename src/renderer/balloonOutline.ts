@@ -24,13 +24,35 @@ type Point = [number, number];
 const radians = (deg: number): number => (deg * Math.PI) / 180;
 const s = (n: number): string => String(n);
 
-// ── main render entry (port of svg.py _render_balloon) ──────────────────────
+/** Where a balloon's tail attaches to the outline, and where its tip lands. */
+export interface BalloonTail {
+  /** Point on the balloon outline the tail grows from (mm, page coords). */
+  rootX: number;
+  rootY: number;
+  /** Tail tip (mm, page coords) — `tailLength` out along the root's radial. */
+  tipX: number;
+  tipY: number;
+}
 
-export function renderBalloon(
-  renderer: SVGRenderer,
-  parent: XmlElement,
-  speech: LayoutedSpeech,
-): void {
+/**
+ * Balloon geometry shared by rendering and by hosts that need to position UI
+ * (the editor's draggable tail handle). Kept in one place so a handle can never
+ * drift from the drawn tail.
+ *
+ * `rx`/`ry` reproduce the aspect_ratio reshape; the tail root comes out of the
+ * SAME seeded outline generator the renderer uses, so the jittered radius is
+ * identical rather than an idealized ellipse point.
+ */
+function _balloon_geometry(speech: LayoutedSpeech): {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  has_tail: boolean;
+  tail_edge: string | null;
+  tail_pos: number;
+  seed: number;
+} {
   const r = speech.rect;
   const attrs = speech.attrs as BalloonAttrs;
   const cx = r.x + r.w / 2;
@@ -51,12 +73,6 @@ export function renderBalloon(
     rx = ry > 0 ? area_r / ry : rx;
   }
 
-  const common: Record<string, string> = {
-    fill: attrs.background,
-    stroke: attrs.borderColor,
-    "stroke-width": s(attrs.border),
-  };
-
   const has_tail = speech.has_tail && attrs.shape !== "thought";
   let tail_edge: string | null = null;
   let tail_pos = 50.0;
@@ -65,58 +81,92 @@ export function renderBalloon(
     [tail_edge, tail_pos] = _angle_to_edge_pos(math_angle);
   }
 
-  const seed = speechSeed(r, attrs.shape);
+  return { cx, cy, rx, ry, has_tail, tail_edge, tail_pos, seed: speechSeed(r, attrs.shape) };
+}
 
-  let points: Point[];
-  let tail_index: number | null;
-  let sharp: number[];
+/** Build the outline point list for a balloon, and the tail's index within it. */
+function _balloon_outline(
+  speech: LayoutedSpeech,
+  g: ReturnType<typeof _balloon_geometry>,
+): { points: Point[]; tail_index: number | null; sharp: number[] } {
+  const attrs = speech.attrs as BalloonAttrs;
+  const { cx, cy, rx, ry, tail_edge, tail_pos, seed } = g;
+
   if (attrs.shape === "oval" || attrs.shape === "whisper" || attrs.shape === "thought") {
-    [points, tail_index] = _ellipse_outline_points(
-      cx,
-      cy,
-      rx,
-      ry,
-      tail_edge,
-      tail_pos,
-      seed,
-      16,
-      attrs.jitter,
+    const [points, tail_index] = _ellipse_outline_points(
+      cx, cy, rx, ry, tail_edge, tail_pos, seed, 16, attrs.jitter,
     );
-    sharp = [];
-  } else if (attrs.shape === "shout" || attrs.shape === "jagged" || attrs.shape === "explosion") {
-    [points, tail_index, sharp] = _star_outline_points(
-      cx,
-      cy,
-      rx,
-      ry,
-      attrs.shape,
-      tail_edge,
-      tail_pos,
-      seed,
-      attrs.innerRatio,
-      attrs.jitter,
-    );
-  } else {
-    // rounded_box
-    [points, tail_index, sharp] = _rounded_rect_outline_points(
-      cx,
-      cy,
-      rx,
-      ry,
-      attrs.cornerRadius,
-      tail_edge,
-      tail_pos,
-    );
+    return { points, tail_index, sharp: [] };
   }
+  if (attrs.shape === "shout" || attrs.shape === "jagged" || attrs.shape === "explosion") {
+    const [points, tail_index, sharp] = _star_outline_points(
+      cx, cy, rx, ry, attrs.shape, tail_edge, tail_pos, seed, attrs.innerRatio, attrs.jitter,
+    );
+    return { points, tail_index, sharp };
+  }
+  // rounded_box
+  const [points, tail_index, sharp] = _rounded_rect_outline_points(
+    cx, cy, rx, ry, attrs.cornerRadius, tail_edge, tail_pos,
+  );
+  return { points, tail_index, sharp };
+}
+
+/**
+ * Resolve a balloon's tail root and tip in page mm, or null when it has none
+ * (`has_tail` false, or a `thought` balloon, which draws a trail of circles
+ * instead of a fused tail).
+ *
+ * This is the function an editor should use to place a tail handle: it runs the
+ * same seeded outline generation as `renderBalloon`, so the returned root sits
+ * exactly on the drawn (jittered) outline.
+ */
+export function resolveBalloonTail(speech: LayoutedSpeech): BalloonTail | null {
+  if (speech.kind !== "balloon") return null;
+  const attrs = speech.attrs as BalloonAttrs;
+  const g = _balloon_geometry(speech);
+  if (!g.has_tail) return null;
+
+  const { points, tail_index } = _balloon_outline(speech, g);
+  if (tail_index === null) return null;
+
+  const root = points[tail_index];
+  const [tipX, tipY] = _tail_tip(root, g.cx, g.cy, attrs.tailLength);
+  return { rootX: root[0], rootY: root[1], tipX, tipY };
+}
+
+/** Tail tip: `length` out from `root` along the ray from the balloon centre. */
+function _tail_tip(root: Point, cx: number, cy: number, length: number): Point {
+  const dx = root[0] - cx;
+  const dy = root[1] - cy;
+  const dist = Math.hypot(dx, dy) || 1.0;
+  return [root[0] + (dx / dist) * length, root[1] + (dy / dist) * length];
+}
+
+// ── main render entry (port of svg.py _render_balloon) ──────────────────────
+
+export function renderBalloon(
+  renderer: SVGRenderer,
+  parent: XmlElement,
+  speech: LayoutedSpeech,
+): void {
+  const r = speech.rect;
+  const attrs = speech.attrs as BalloonAttrs;
+  // Geometry + outline come from the shared helpers, so `resolveBalloonTail`
+  // (used by editors to place a tail handle) can never disagree with what is
+  // actually drawn here.
+  const g = _balloon_geometry(speech);
+  const { cx, cy, rx, ry, has_tail } = g;
+
+  const common: Record<string, string> = {
+    fill: attrs.background,
+    stroke: attrs.borderColor,
+    "stroke-width": s(attrs.border),
+  };
+
+  let { points, tail_index, sharp } = _balloon_outline(speech, g);
 
   if (has_tail && tail_index !== null) {
-    const root = points[tail_index];
-    const dx = root[0] - cx;
-    const dy = root[1] - cy;
-    const dist = Math.hypot(dx, dy) || 1.0;
-    const ux = dx / dist;
-    const uy = dy / dist;
-    const tip: Point = [root[0] + ux * attrs.tailLength, root[1] + uy * attrs.tailLength];
+    const tip = _tail_tip(points[tail_index], cx, cy, attrs.tailLength);
     [points, sharp] = _insert_tail_notch(points, tail_index, tip, sharp);
   }
 

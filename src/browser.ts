@@ -21,6 +21,12 @@ export { parse } from "./parser.js";
 export { serialize } from "./serialize.js";
 export { LayoutEngine, resolveImageLayerRect, Rect } from "./layout/slicing.js";
 export { SVGRenderer } from "./renderer/svg.js";
+// Tail geometry for a balloon, so a host can place a draggable tail handle that
+// lands exactly on the drawn (seed-jittered) outline — same function the
+// renderer uses, mirroring resolveImageLayerRect.
+export { resolveBalloonTail } from "./renderer/balloonOutline.js";
+export type { BalloonTail } from "./renderer/balloonOutline.js";
+export type { LayoutedSpeech } from "./layout/slicing.js";
 export type { ImageLoader, LoadedImage } from "./renderer/imageLoader.js";
 export type {
   Page,
