@@ -77,6 +77,7 @@ export function defaultImageLayer(path, imageFit = null) {
         dx: { value: 0, unit: "mm" },
         dy: { value: 0, unit: "mm" },
         clip: null,
+        flipH: false,
     };
 }
 export function defaultPanelAttrs() {
@@ -277,6 +278,7 @@ export const IMAGE_LAYER_ATTR_KEYS = new Set([
     "dx",
     "dy",
     "clip",
+    "flip_h",
 ]);
 export const BALLOON_ATTR_KEYS = new Set([
     // shared SpeechAttrs

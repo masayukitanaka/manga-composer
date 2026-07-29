@@ -332,6 +332,7 @@ images {
 | `y` | `<n>%` \| `<n>mm` | none | Box top-left Y, panel-relative. Overrides `anchor_pos` on the Y axis only |
 | `dx`, `dy` | `<n>%` \| `<n>mm` | `0` | Fine-tuning offset applied after placement |
 | `clip` | `true` \| `false` | the panel's `image_clip` (then `true`) | Clip this layer to the panel rect. See below |
+| `flip_h` | `true` \| `false` | `false` | Mirror the image horizontally (left↔right) within its box |
 
 Position and size mirror a balloon's `x`/`y`/`width`/`height`/`anchor_pos`/`dx`/`dy`,
 but are **panel-relative and default to `%`** (of the panel's own size). `mm` is

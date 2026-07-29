@@ -189,6 +189,7 @@ function imageLayerAttrs(layer: ImageLayer): string[] {
   if (!lengthEq(layer.dx, d.dx)) out.push(`dx: ${length(layer.dx)}`);
   if (!lengthEq(layer.dy, d.dy)) out.push(`dy: ${length(layer.dy)}`);
   if (layer.clip !== d.clip) out.push(`clip: ${layer.clip}`);
+  if (layer.flipH !== d.flipH) out.push(`flip_h: ${layer.flipH}`);
   return out;
 }
 

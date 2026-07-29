@@ -69,6 +69,7 @@ export interface ImageLayer {
     dx: Length;
     dy: Length;
     clip: boolean | null;
+    flipH: boolean;
 }
 export declare function defaultImageLayer(path: string, imageFit?: ImageFit | null): ImageLayer;
 export interface PanelAttrs {

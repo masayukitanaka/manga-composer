@@ -48,6 +48,7 @@ describe("image layers — parsing / normalization", () => {
         dx: { value: 0, unit: "mm" },
         dy: { value: 0, unit: "mm" },
         clip: null,
+        flipH: false,
       },
     ]);
   });
@@ -174,6 +175,7 @@ describe("image layers — placement resolution", () => {
       dx: { value: 0, unit: "mm" },
       dy: { value: 0, unit: "mm" },
       clip: null,
+        flipH: false,
       ...over,
     };
   }
@@ -367,6 +369,36 @@ describe("image layers — clip", () => {
   });
 });
 
+describe("image layers — flip_h (horizontal mirror)", () => {
+  it("defaults to no flip and parses flip_h: true", () => {
+    const a = panel0(`page { panel s { images { { "a.png" } } } }`).attrs.imageLayers[0];
+    expect(a.flipH).toBe(false);
+    const b = panel0(`page { panel s { images { { "a.png" flip_h: true } } } }`).attrs
+      .imageLayers[0];
+    expect(b.flipH).toBe(true);
+  });
+
+  it("rejects a non-boolean flip_h", () => {
+    expect(() => parse(`page { panel s { images { { "a.png" flip_h: 1 } } } }`)).toThrow(
+      /flip_h must be true or false/,
+    );
+  });
+
+  it("mirrors the <image> about its box center when flip_h is true", () => {
+    // A4 page (210x297), default padding 10 → panel rect (10,10,190,277),
+    // box center X = 10 + 190/2 = 105, so translate(210 0) scale(-1 1).
+    const { svg } = renderPanels(`page { panel s { images { { "x.png" flip_h: true } } } }`);
+    const img = svg.match(/<image\b[^>]*>/)![0];
+    expect(img).toMatch(/transform="translate\(210 0\) scale\(-1 1\)"/);
+  });
+
+  it("does not add a transform when flip_h is false", () => {
+    const { svg } = renderPanels(`page { panel s { images { { "x.png" } } } }`);
+    const img = svg.match(/<image\b[^>]*>/)![0];
+    expect(img).not.toMatch(/transform=/);
+  });
+});
+
 describe("image layers — serialize round-trip", () => {
   function roundTrip(src: string) {
     const first = parse(src);
@@ -399,5 +431,9 @@ describe("image layers — serialize round-trip", () => {
         }
       }
     }`);
+  });
+
+  it("round-trips flip_h", () => {
+    roundTrip(`page { panel s { images { { path: "a.png" flip_h: true } } } }`);
   });
 });

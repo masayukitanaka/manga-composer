@@ -182,6 +182,8 @@ function imageLayerAttrs(layer) {
         out.push(`dy: ${length(layer.dy)}`);
     if (layer.clip !== d.clip)
         out.push(`clip: ${layer.clip}`);
+    if (layer.flipH !== d.flipH)
+        out.push(`flip_h: ${layer.flipH}`);
     return out;
 }
 function lengthEq(a, b) {

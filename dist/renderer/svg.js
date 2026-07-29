@@ -769,6 +769,11 @@ export class SVGRenderer {
             href: `data:${loaded.mime};base64,${loaded.dataBase64}`,
             preserveAspectRatio: aspect_ratio,
         });
+        // Mirror horizontally about the box's center: scale(-1,1) about cx.
+        if (layer.flipH) {
+            const cx = box.x + box.w / 2;
+            img.set("transform", `translate(${s(2 * cx)} 0) scale(-1 1)`);
+        }
         if (clip_path !== null)
             img.set("clip-path", clip_path);
     }

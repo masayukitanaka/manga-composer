@@ -617,6 +617,10 @@ class Parser {
             const cv = raw.clip.kind === "scalar" ? raw.clip.text : String(raw.clip.length.value);
             layer.clip = toBool(cv, "clip");
         }
+        if ("flip_h" in raw) {
+            const fv = raw.flip_h.kind === "scalar" ? raw.flip_h.text : String(raw.flip_h.length.value);
+            layer.flipH = toBool(fv, "flip_h");
+        }
         return layer;
     }
     /**

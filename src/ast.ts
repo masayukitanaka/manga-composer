@@ -157,6 +157,8 @@ export interface ImageLayer {
   // `image_clip` (which defaults to true). Set false to let the image bleed
   // out past the panel border (character-breaking-the-frame effect).
   clip: boolean | null;
+  // Mirror the image horizontally (left↔right) within its placement box.
+  flipH: boolean;
 }
 
 export function defaultImageLayer(path: string, imageFit: ImageFit | null = null): ImageLayer {
@@ -171,6 +173,7 @@ export function defaultImageLayer(path: string, imageFit: ImageFit | null = null
     dx: { value: 0, unit: "mm" },
     dy: { value: 0, unit: "mm" },
     clip: null,
+    flipH: false,
   };
 }
 
@@ -545,6 +548,7 @@ export const IMAGE_LAYER_ATTR_KEYS: ReadonlySet<string> = new Set([
   "dx",
   "dy",
   "clip",
+  "flip_h",
 ]);
 
 export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
