@@ -272,7 +272,11 @@ export class SVGRenderer {
       this._render_rect_panel(g, gb, panel, r);
     }
 
-    if (attrs.imageLayers.length > 0) this._render_image_layers(g, panel, defs);
+    // `r` is the OFFSET-adjusted rect, not `panel.rect`: offsets grow the area
+    // the panel actually draws, so layers must be placed and clipped against
+    // it. Clipping to the raw rect cut a band off every image on an
+    // `offset_*` panel.
+    if (attrs.imageLayers.length > 0) this._render_image_layers(g, panel, r, defs);
     if (attrs.text) this._render_text(g, panel);
 
     if (attrs.label !== null) {
@@ -797,17 +801,19 @@ export class SVGRenderer {
   private _render_image_layers(
     parent: XmlElement,
     panel: LayoutedPanel,
+    rect: Rect,
     defs: XmlElement | null,
   ): void {
-    // A single clipPath (= the panel rect) shared by every clipped layer of
-    // this panel; created lazily so panels with no clipped layer add nothing.
+    // A single clipPath (= the panel's DRAWN rect, offsets included) shared by
+    // every clipped layer of this panel; created lazily so panels with no
+    // clipped layer add nothing.
     let clip_ref: string | null = null;
     const ensureClip = (): string | null => {
       if (defs === null) return null;
       if (clip_ref === null) {
         const clip_id = `clip_imgs_${panel.id}`;
         const cp = defs.sub("clipPath", { id: clip_id });
-        const r = panel.rect;
+        const r = rect;
         cp.sub("rect", { x: s(r.x), y: s(r.y), width: s(r.w), height: s(r.h) });
         clip_ref = `url(#${clip_id})`;
       }
@@ -815,6 +821,9 @@ export class SVGRenderer {
     };
 
     for (const layer of panel.attrs.imageLayers) {
+      // Placement stays relative to the LAID-OUT rect, not the offset one: a
+      // layer's `%` size/position means "of the panel", and offsets are a
+      // presentation nudge for overlapping neighbours. Only the clip widens.
       const box = resolveImageLayerRect(layer, panel.rect);
       // Effective clip: layer.clip overrides the panel default (imageClip).
       const clip = layer.clip ?? panel.attrs.imageClip;
