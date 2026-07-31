@@ -104,9 +104,13 @@ function _balloon_outline(
     );
     return { points, tail_index, sharp };
   }
-  // rounded_box
+  // rounded_box. Unlike the organic shapes, this one attaches the tail by
+  // intersecting the real tail ray with the real box (see
+  // `_rounded_rect_outline_points`), so it takes the angle rather than the
+  // edge/percent pair.
+  const tail_angle = tail_edge === null ? null : radians(attrs.tailAngle - 90.0);
   const [points, tail_index, sharp] = _rounded_rect_outline_points(
-    cx, cy, rx, ry, attrs.cornerRadius, tail_edge, tail_pos,
+    cx, cy, rx, ry, attrs.cornerRadius, tail_angle,
   );
   return { points, tail_index, sharp };
 }
@@ -356,21 +360,34 @@ function _star_outline_points(
   return [points, tail_index, sharp_indices];
 }
 
+/**
+ * Outline for `rounded_box`, with the tail spliced in at `tail_angle`.
+ *
+ * The tail attaches where the ray from the centre actually leaves the box —
+ * NOT via the edge+percent pair the organic shapes use. That pair maps each 90°
+ * wedge linearly onto one side, which only matches a real rectangle at the four
+ * wedge centres (0/90/180/270); in between, the attachment drifted, and along
+ * the bottom/left edges the percent even ran opposite to the sweep direction, so
+ * e.g. `tail_angle: 220` (down-left) came out on the bottom-RIGHT.
+ */
 function _rounded_rect_outline_points(
   cx: number,
   cy: number,
   rx: number,
   ry: number,
   corner_radius: number,
-  edge: string | null,
-  pos_pct: number,
+  tail_angle: number | null,
 ): [Point[], number | null, number[]] {
   const x0 = cx - rx;
   const y0 = cy - ry;
   const x1 = cx + rx;
   const y1 = cy + ry;
   const r = Math.max(0.0, Math.min(corner_radius, rx, ry));
-  const arc_steps = 4;
+  // The corner arcs are drawn as polylines (see sharp_indices below), so the
+  // step count sets how round they look. Scale with the radius — a fixed count
+  // leaves big corners visibly faceted. Targets ≲1mm per step, which is well
+  // under what's visible at print size.
+  const arc_steps = Math.max(4, Math.ceil((r * Math.PI) / 2));
 
   const arc = (center: Point, start_angle: number, end_angle: number): Point[] => {
     const pts: Point[] = [];
@@ -389,6 +406,15 @@ function _rounded_rect_outline_points(
     points = points.concat(arc([x1 - r, y1 - r], 0, Math.PI / 2));
     points = points.concat(arc([x0 + r, y1 - r], Math.PI / 2, Math.PI));
     points = points.concat(arc([x0 + r, y0 + r], Math.PI, (3 * Math.PI) / 2));
+    // Join every point with straight lines rather than Catmull-Rom.
+    //
+    // This shape is exact geometry, not a hand-drawn wobble: the arc points
+    // already lie on the corner circle, and the sides are dead straight. Running
+    // them through the smoothing spline made the curve overshoot where point
+    // spacing jumps (arc ~2mm vs. a 28mm side), which showed up as a kink/bulge
+    // right where each corner meets its edge. Sampling the arcs finely gives a
+    // smooth corner without any spline.
+    sharp_indices = points.map((_, i) => i);
   } else {
     points = [
       [x1, y0],
@@ -400,58 +426,86 @@ function _rounded_rect_outline_points(
   }
 
   let tail_index: number | null = null;
-  if (edge !== null) {
-    const t = Math.max(0.0, Math.min(100.0, pos_pct)) / 100.0;
-    let tp: Point;
-    let insert_after: number;
-    if (edge === "top") {
-      tp = [x0 + (x1 - x0) * t, y0];
-      insert_after = _find_edge_segment(points, "top", x0, x1, y0);
-    } else if (edge === "bottom") {
-      tp = [x0 + (x1 - x0) * t, y1];
-      insert_after = _find_edge_segment(points, "bottom", x0, x1, y1);
-    } else if (edge === "left") {
-      tp = [x0, y0 + (y1 - y0) * t];
-      insert_after = _find_edge_segment(points, "left", y0, y1, x0);
-    } else {
-      tp = [x1, y0 + (y1 - y0) * t];
-      insert_after = _find_edge_segment(points, "right", y0, y1, x1);
-    }
+  if (tail_angle !== null) {
+    const tp = _ray_exit_on_rect(cx, cy, x0, y0, x1, y1, tail_angle);
+    // Splice the tail point into the segment it actually lies on, so its
+    // neighbours are the two ends of that segment. `_insert_tail_notch` builds
+    // the tail's base direction from `next - prev`, so attaching it anywhere
+    // else yields a bogus direction (pinched or sideways tails).
+    const insert_after = _find_segment_containing(points, tp);
     points.splice(insert_after + 1, 0, tp);
     sharp_indices = sharp_indices.map((idx) => (idx > insert_after ? idx + 1 : idx));
     tail_index = insert_after + 1;
+    // The spliced tail point is part of the same straight-line outline, so it is
+    // sharp as well — otherwise the two segments either side of it get splined
+    // and the tail base bows.
+    if (r > 0) sharp_indices.push(tail_index);
   }
 
   return [points, tail_index, sharp_indices];
 }
 
-function _find_edge_segment(
-  points: Point[],
-  edge: string,
-  a0: number,
-  a1: number,
-  fixed: number,
-): number {
+/**
+ * Where the ray from the box centre at `angle` crosses the box boundary.
+ *
+ * Uses the rectangle itself, not the corner-rounded outline: the tail should
+ * leave from the side it points at, and a tail aimed into a rounded corner still
+ * reads correctly when rooted on the straight part next to it.
+ */
+function _ray_exit_on_rect(
+  cx: number,
+  cy: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  angle: number,
+): Point {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  // Distance along the ray to each bounding line; the nearest positive one is
+  // the side the ray actually exits through.
+  let t = Infinity;
+  if (Math.abs(dx) > 1e-9) {
+    const tx = dx > 0 ? (x1 - cx) / dx : (x0 - cx) / dx;
+    if (tx > 0) t = Math.min(t, tx);
+  }
+  if (Math.abs(dy) > 1e-9) {
+    const ty = dy > 0 ? (y1 - cy) / dy : (y0 - cy) / dy;
+    if (ty > 0) t = Math.min(t, ty);
+  }
+  if (!Number.isFinite(t)) return [x1, cy];
+  // Clamp against rounding so the point never lands a hair outside the box.
+  const px = Math.min(x1, Math.max(x0, cx + dx * t));
+  const py = Math.min(y1, Math.max(y0, cy + dy * t));
+  return [px, py];
+}
+
+/**
+ * Index of the point starting the outline segment that `p` lies on (or is
+ * nearest to). The tail point is spliced in right after it.
+ */
+function _find_segment_containing(points: Point[], p: Point): number {
+  let best = points.length - 1;
+  let bestDist = Infinity;
   for (let i = 0; i < points.length; i++) {
-    const [px, py] = points[i];
-    if (
-      (edge === "top" || edge === "bottom") &&
-      Math.abs(py - fixed) < 1e-6 &&
-      Math.min(a0, a1) <= px &&
-      px <= Math.max(a0, a1)
-    ) {
-      return i;
-    }
-    if (
-      (edge === "left" || edge === "right") &&
-      Math.abs(px - fixed) < 1e-6 &&
-      Math.min(a0, a1) <= py &&
-      py <= Math.max(a0, a1)
-    ) {
-      return i;
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const vx = b[0] - a[0];
+    const vy = b[1] - a[1];
+    const len2 = vx * vx + vy * vy;
+    if (len2 < 1e-12) continue;
+    // Projection of p onto the segment, clamped to it.
+    const u = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2));
+    const qx = a[0] + vx * u;
+    const qy = a[1] + vy * u;
+    const dist = Math.hypot(p[0] - qx, p[1] - qy);
+    if (dist < bestDist - 1e-9) {
+      bestDist = dist;
+      best = i;
     }
   }
-  return points.length - 1;
+  return best;
 }
 
 function _insert_tail_notch(
