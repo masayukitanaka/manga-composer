@@ -80,6 +80,8 @@ export interface PanelAttrs {
     imageClip: boolean;
     imageLayers: ImageLayer[];
     label: string | null;
+    description: string | null;
+    showDescription: boolean;
     text: string | null;
     textDirection: TextDirection;
     border: number;
@@ -136,6 +138,7 @@ export interface BalloonAttrs extends SpeechAttrs {
 export interface MonologueAttrs extends SpeechAttrs {
     textColor: string;
 }
+export declare function defaultSpeechAttrs(): SpeechAttrs;
 export declare function defaultBalloonAttrs(): BalloonAttrs;
 export declare function defaultMonologueAttrs(): MonologueAttrs;
 export interface BalloonNode {

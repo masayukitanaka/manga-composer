@@ -189,6 +189,11 @@ export interface PanelAttrs {
   // `image:` attribute is folded into a one-element array by the parser.
   imageLayers: ImageLayer[];
   label: string | null;
+  // A note describing what this panel should contain. Shown as the panel's
+  // placeholder text only when `showDescription` is true AND the panel has no
+  // image layers (a storyboard/script aid before art is dropped in).
+  description: string | null;
+  showDescription: boolean;
   text: string | null;
   textDirection: TextDirection;
   border: number;
@@ -220,6 +225,8 @@ export function defaultPanelAttrs(): PanelAttrs {
     imageClip: true,
     imageLayers: [],
     label: null,
+    description: null,
+    showDescription: false,
     text: null,
     textDirection: "horizontal",
     border: 1.0,
@@ -291,7 +298,7 @@ export interface MonologueAttrs extends SpeechAttrs {
   textColor: string;
 }
 
-function defaultSpeechAttrs(): SpeechAttrs {
+export function defaultSpeechAttrs(): SpeechAttrs {
   return {
     text: "",
     textDirection: "horizontal",
@@ -468,6 +475,7 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   image: "string",
   text: "string",
   label: "string",
+  description: "string",
   border_color: "string",
   background: "string",
   shape: "string",
@@ -476,6 +484,7 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   // passthrough (enum): str(value)
   image_fit: "passthrough",
   image_clip: "passthrough",
+  show_description: "passthrough",
   text_direction: "passthrough",
   anchor_pos: "passthrough",
   align: "passthrough",
@@ -516,6 +525,8 @@ export const PANEL_ATTR_KEYS: ReadonlySet<string> = new Set([
   "image_fit",
   "image_clip",
   "label",
+  "description",
+  "show_description",
   "text",
   "text_direction",
   "border",

@@ -1,0 +1,51 @@
+// Storyboard / script layout using panel descriptions.
+//
+// `show_description: true` draws the panel's `description` as centered gray
+// placeholder text — but ONLY while the panel has no image. Drop art into the
+// panel (image: / images { }) later and the note disappears automatically, so
+// the same file works as a rough script and as the finished page.
+
+page {
+  size: B5
+  direction: rtl
+  gutter: 6
+  padding: 15
+  border: 1
+
+  // Establishing shot across the top.
+  row height: 30% {
+    panel establishing {
+      description: "夕暮れの街並みを俯瞰。長い影が伸び、遠くに主人公の家が見える。"
+      show_description: true
+    }
+  }
+
+  // Two reaction panels.
+  row height: 35% {
+    col {
+      panel hero_face {
+        description: "主人公のアップ。決意のこもった表情で前を見据える。"
+        show_description: true
+      }
+    }
+    col {
+      // This panel already has art, so its description is suppressed and the
+      // image shows instead — no need to remove the note.
+      panel rival {
+        description: "ライバルが不敵に笑う（作画済みなら非表示）。"
+        show_description: true
+        images {
+          { "assets/boy.jpg" image_fit: contain }
+        }
+      }
+    }
+  }
+
+  // Wide closing panel.
+  row {
+    panel confrontation {
+      description: "二人が向かい合う引きの構図。緊張感のある間。ここにセリフが入る。"
+      show_description: true
+    }
+  }
+}

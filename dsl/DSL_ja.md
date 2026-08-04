@@ -237,6 +237,8 @@ panel quiet {
 | `image` | string (path) | なし | パネル内画像のパス（1枚）。複数枚を重ねる場合は `images { ... }` ブロックを使う（後述） |
 | `image_fit` | `cover` \| `contain` \| `fill` | `cover` | 画像の収め方 |
 | `image_clip` | `true` \| `false` | `true` | このパネルの画像レイヤーの `clip` 既定値（各レイヤーの `clip` が優先）。`true` = レイヤーをパネル矩形で切り落とす |
+| `description` | string | なし | そのコマに何を描くかの説明（絵コンテ／脚本用のメモ） |
+| `show_description` | `true` \| `false` | `false` | `true` かつ画像が1枚も無いとき、`description` をコマ中央にプレースホルダとして表示する |
 | `text` | string | なし | パネル内テキスト |
 | `text_direction` | `horizontal` \| `vertical` | `horizontal` | 文字方向 |
 | `border` | number (mm) | `1` | 枠線の太さ（全辺共通） |

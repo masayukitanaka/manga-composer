@@ -13,7 +13,7 @@
  * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
  * (docs/PORTING_NOTES.md).
  */
-import { DEFAULT_FONT_STACK } from "../ast.js";
+import { DEFAULT_FONT_STACK, defaultSpeechAttrs } from "../ast.js";
 import { Rect, LayoutedSpeech, resolveImageLayerRect, resolveLineHeight, charAdvance, } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import { parseRichText } from "./richtext.js";
@@ -223,6 +223,20 @@ export class SVGRenderer {
             });
             t.setText(attrs.label ? attrs.label : panel.id);
         }
+        // Panel description: a placeholder note shown only when requested and the
+        // panel has no image layers yet (storyboard/script aid before art exists).
+        if (attrs.showDescription && attrs.description && attrs.imageLayers.length === 0) {
+            this._render_description(g, r, attrs.description);
+        }
+    }
+    /** Render a panel's description as centered, wrapped, muted placeholder text. */
+    _render_description(parent, rect, description) {
+        const attrs = defaultSpeechAttrs();
+        attrs.text = description;
+        attrs.align = "center"; // horizontal centering
+        attrs.anchorPos = "center"; // vertical centering (top_* anchors hug the top)
+        attrs.padding = 3.0;
+        this._draw_text_block(parent, rect, attrs, "#999999");
     }
     _render_rect_panel(g, gb, panel, r) {
         const attrs = panel.attrs;

@@ -31,6 +31,8 @@ export declare class SVGRenderer {
     constructor(page: Page, panels: LayoutedPanel[], speeches?: LayoutedSpeech[] | null, imageLoader?: ImageLoader | null);
     render(): string;
     private _render_panel;
+    /** Render a panel's description as centered, wrapped, muted placeholder text. */
+    private _render_description;
     private _render_rect_panel;
     private _render_skewed_panel;
     /**

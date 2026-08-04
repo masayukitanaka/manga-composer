@@ -89,6 +89,8 @@ export function defaultPanelAttrs() {
         imageClip: true,
         imageLayers: [],
         label: null,
+        description: null,
+        showDescription: false,
         text: null,
         textDirection: "horizontal",
         border: 1.0,
@@ -108,7 +110,7 @@ export function defaultPanelAttrs() {
         offsetRight: 0.0,
     };
 }
-function defaultSpeechAttrs() {
+export function defaultSpeechAttrs() {
     return {
         text: "",
         textDirection: "horizontal",
@@ -202,6 +204,7 @@ export const PANEL_ATTR_TYPES = {
     image: "string",
     text: "string",
     label: "string",
+    description: "string",
     border_color: "string",
     background: "string",
     shape: "string",
@@ -210,6 +213,7 @@ export const PANEL_ATTR_TYPES = {
     // passthrough (enum): str(value)
     image_fit: "passthrough",
     image_clip: "passthrough",
+    show_description: "passthrough",
     text_direction: "passthrough",
     anchor_pos: "passthrough",
     align: "passthrough",
@@ -247,6 +251,8 @@ export const PANEL_ATTR_KEYS = new Set([
     "image_fit",
     "image_clip",
     "label",
+    "description",
+    "show_description",
     "text",
     "text_direction",
     "border",

@@ -228,6 +228,8 @@ panel quiet {
 | `image` | string (path) | none | Path to a single image within the panel. For multiple layered images, use an `images { ... }` block instead (see below) |
 | `image_fit` | `cover` \| `contain` \| `fill` | `cover` | How to fit the image |
 | `image_clip` | `true` \| `false` | `true` | Default clip behavior for this panel's image layers (a layer's own `clip` overrides it). `true` = clip layers to the panel rect |
+| `description` | string | none | A note describing what the panel should contain (storyboard/script aid) |
+| `show_description` | `true` \| `false` | `false` | When `true` AND the panel has no images, draw `description` as centered placeholder text |
 | `text` | string | none | Text within panel |
 | `text_direction` | `horizontal` \| `vertical` | `horizontal` | Text direction |
 | `border` | number (mm) | `1` | Border thickness (all sides) |

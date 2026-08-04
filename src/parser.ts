@@ -900,6 +900,12 @@ class Parser {
         case "label":
           attrs.label = v as string;
           break;
+        case "description":
+          attrs.description = v as string;
+          break;
+        case "show_description":
+          attrs.showDescription = toBool(v as string, "show_description");
+          break;
         case "text":
           attrs.text = v as string;
           break;

@@ -211,6 +211,10 @@ function panelAttrLines(a, cfg) {
         out.push(`image_clip: ${a.imageClip}`);
     if (a.label !== d.label)
         out.push(`label: ${str(a.label)}`);
+    if (a.description !== d.description)
+        out.push(`description: ${str(a.description)}`);
+    if (a.showDescription !== d.showDescription)
+        out.push(`show_description: ${a.showDescription}`);
     if (a.text !== d.text)
         out.push(`text: ${str(a.text)}`);
     if (a.textDirection !== d.textDirection)

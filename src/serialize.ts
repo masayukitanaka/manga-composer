@@ -215,6 +215,9 @@ function panelAttrLines(a: PanelAttrs, cfg: PageConfig): string[] {
   if (a.imageFit !== d.imageFit) out.push(`image_fit: ${a.imageFit}`);
   if (a.imageClip !== d.imageClip) out.push(`image_clip: ${a.imageClip}`);
   if (a.label !== d.label) out.push(`label: ${str(a.label!)}`);
+  if (a.description !== d.description) out.push(`description: ${str(a.description!)}`);
+  if (a.showDescription !== d.showDescription)
+    out.push(`show_description: ${a.showDescription}`);
   if (a.text !== d.text) out.push(`text: ${str(a.text!)}`);
   if (a.textDirection !== d.textDirection) out.push(`text_direction: ${a.textDirection}`);
   if (a.border !== borderDefault) out.push(`border: ${num(a.border)}`);
