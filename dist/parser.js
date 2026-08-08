@@ -143,24 +143,35 @@ class Parser {
         throw new ParseError(`Expected a value but got ${t.type} ${JSON.stringify(t.value)} at line ${t.line}, column ${t.col}`);
     }
     /** length_value: NUMBER UNIT | PERCENTAGE (used by row height / col width). */
-    parseLengthValue() {
+    parseLengthValue(field = "size") {
         const t = this.peek();
+        let len;
         if (t.type === "PERCENTAGE") {
             this.next();
-            return { value: toFloat(t.value.replace(/%$/, "")), unit: "%" };
+            len = { value: toFloat(t.value.replace(/%$/, "")), unit: "%" };
         }
-        if (t.type === "NUMBER") {
+        else if (t.type === "NUMBER") {
             this.next();
             // grammar requires a UNIT here, but be lenient like value: allow a bare
             // number to mean mm is NOT valid in grammar (length_value: NUMBER UNIT),
             // so require the unit.
             if (this.atKeyword("mm") || this.atKeyword("px") || this.atKeyword("pt")) {
                 const unit = this.next().value;
-                return { value: toFloat(t.value), unit };
+                len = { value: toFloat(t.value), unit };
             }
-            throw new ParseError(`Expected a unit (mm/px/pt) after ${t.value} at line ${t.line}, column ${t.col}`);
+            else {
+                throw new ParseError(`Expected a unit (mm/px/pt) after ${t.value} at line ${t.line}, column ${t.col}`);
+            }
         }
-        throw new ParseError(`Expected a length value but got ${t.type} ${JSON.stringify(t.value)} at line ${t.line}, column ${t.col}`);
+        else {
+            throw new ParseError(`Expected a length value but got ${t.type} ${JSON.stringify(t.value)} at line ${t.line}, column ${t.col}`);
+        }
+        // A row height / col width must be positive; a negative or zero size is a
+        // mistake that layout would otherwise silently accept and mis-render.
+        if (len.value <= 0) {
+            throw new ParseError(`${field} must be positive (got ${len.value}${len.unit}) at line ${t.line}, column ${t.col}`);
+        }
+        return len;
     }
     // ── page ──────────────────────────────────────────────────────────────
     /** page: "page" CNAME? "{" page_body* "}" */
@@ -401,13 +412,13 @@ class Parser {
         if (key === "height") {
             if (kind !== "row")
                 throw new ParseError(`'height' is only valid on row`);
-            node.height = this.parseLengthValue();
+            node.height = this.parseLengthValue("row height");
             return;
         }
         if (key === "width") {
             if (kind !== "col")
                 throw new ParseError(`'width' is only valid on col`);
-            node.width = this.parseLengthValue();
+            node.width = this.parseLengthValue("col width");
             return;
         }
         if (key === "gutter") {
@@ -744,6 +755,12 @@ class Parser {
     // ── attr builders (coercion + validation) ─────────────────────────────
     coerceScalar(name, val) {
         const type = PANEL_ATTR_TYPES[name];
+        if (type === undefined) {
+            // An attribute reached here without a value-type entry — a table/parser
+            // drift bug, not user input (assertKnownKeys already accepted the key).
+            // Fail loudly rather than silently returning a mistyped raw string.
+            throw new ParseError(`Internal: no value-type registered for attribute '${name}'`);
+        }
         const text = val.kind === "scalar" ? val.text : String(val.length.value);
         if (type === "int")
             return toInt(text);
@@ -751,7 +768,7 @@ class Parser {
             return toFloat(text);
         if (type === "string")
             return stripString(text);
-        // passthrough (enum) or unknown-but-allowed: keep as raw string.
+        // passthrough (enum, or a Length handled directly by the builder): raw string.
         return text;
     }
     buildPanelAttrs(raw) {

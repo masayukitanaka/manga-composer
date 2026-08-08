@@ -3,15 +3,13 @@
  *
  * Port of manga-gen-python/src/manga_gen/renderer/svg.py — ported LITERALLY,
  * preserving Python method/variable names, branch order, and the explanatory
- * comments (docs/PORTING_GUIDE.md §4 Stage 6). The _render_panel skew /
- * corner-intersection block is the most bug-fragile code in the whole port;
- * keeping the original variable names and comments is what makes a future
- * corner-case bug tractable.
+ * comments. The _render_panel skew / corner-intersection block is the most
+ * bug-fragile code in the whole port; keeping the original variable names and
+ * comments is what makes a future corner-case bug tractable.
  *
  * Balloon rendering (_render_balloon + outline helpers) lives in
  * balloonOutline.ts. Number formatting: we do NOT reproduce Python's str(float)
- * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
- * (docs/PORTING_NOTES.md).
+ * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance.
  */
 import { DEFAULT_FONT_STACK, defaultSpeechAttrs } from "../ast.js";
 import { Rect, LayoutedSpeech, resolveImageLayerRect, resolveLineHeight, charAdvance, } from "../layout/slicing.js";
@@ -68,7 +66,54 @@ function _panel_fill_polygon(tl_x, tl_y, tr_x, tr_y, br_x, br_y, bl_x, bl_y, x_m
     ];
     return _clip_polygon_to_rect(quad, x_min, y_min, x_max, y_max);
 }
+/**
+ * Intersection of a skewed horizontal border line (`hsl`) with a skewed vertical
+ * border line (`vsl`), used to close a skewed panel's corner exactly where the
+ * top/bottom gutter meets the left/right gutter. Returns null when the lines are
+ * (near-)parallel (`1 - tan_h·tan_v ≈ 0`), in which case the caller keeps its
+ * existing endpoint. This is the exact formula that was previously inlined
+ * verbatim at six corner sites in _render_skewed_panel.
+ */
+export function _skewline_intersection(hsl, vsl) {
+    const tan_h = Math.tan(radians(hsl.skew_angle));
+    const tan_v = Math.tan(radians(vsl.skew_angle));
+    const denom = 1 - tan_h * tan_v;
+    if (Math.abs(denom) <= 1e-9)
+        return null;
+    const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) / denom;
+    const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
+    return [xi, yi];
+}
 const SPEECH_DEFAULT_Z = 100;
+// Font-family for non-speech text drawn directly by the renderer: panel labels,
+// the `panel.text` placeholder, and image-loading placeholder/error notes.
+// NOTE: this is intentionally the shorter stack, NOT ast.ts's DEFAULT_FONT_STACK
+// (which balloon/monologue text uses via `_draw_text_block`). Unifying the two
+// would change output for panel-text/label fixtures — a separate, verified step.
+const PLACEHOLDER_FONT_FAMILY = "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif";
+// Muted gray used for design-aid placeholder text (panel label, description).
+const PLACEHOLDER_TEXT_COLOR = "#999999";
+// Image-loading feedback: a light fill box + notes.
+const IMAGE_MISSING_FILL = "#cccccc";
+const IMAGE_MISSING_TEXT_COLOR = "#666666";
+const IMAGE_ERROR_TEXT_COLOR = "#ff0000";
+// Body/label text sizes (mm), as SVG font-size strings.
+const LABEL_FONT_SIZE = "4";
+const PLACEHOLDER_NOTE_FONT_SIZE = "3";
+const PANEL_TEXT_FONT_SIZE = "8";
+const BODY_TEXT_COLOR = "#000000";
+// image_fit → SVG preserveAspectRatio.
+const IMAGE_FIT_PRESERVE_ASPECT = {
+    cover: "xMidYMid slice",
+    contain: "xMidYMid meet",
+    fill: "none",
+};
+// align → SVG text-anchor (horizontal text).
+const ALIGN_TO_TEXT_ANCHOR = {
+    start: "start",
+    center: "middle",
+    end: "end",
+};
 export class SVGRenderer {
     page;
     panels;
@@ -217,9 +262,9 @@ export class SVGRenderer {
                 y: s(r.y + r.h / 2),
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
-                "font-size": "4",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#999999",
+                "font-size": LABEL_FONT_SIZE,
+                "font-family": PLACEHOLDER_FONT_FAMILY,
+                fill: PLACEHOLDER_TEXT_COLOR,
             });
             t.setText(attrs.label ? attrs.label : panel.id);
         }
@@ -236,7 +281,7 @@ export class SVGRenderer {
         attrs.align = "center"; // horizontal centering
         attrs.anchorPos = "center"; // vertical centering (top_* anchors hug the top)
         attrs.padding = 3.0;
-        this._draw_text_block(parent, rect, attrs, "#999999");
+        this._draw_text_block(parent, rect, attrs, PLACEHOLDER_TEXT_COLOR);
     }
     _render_rect_panel(g, gb, panel, r) {
         const attrs = panel.attrs;
@@ -565,28 +610,14 @@ export class SVGRenderer {
             else {
                 const hsl = panel.shared_top_skewline;
                 if (panel.shared_right_skewline) {
-                    const vsl = panel.shared_right_skewline;
-                    const tan_h = Math.tan(radians(hsl.skew_angle));
-                    const tan_v = Math.tan(radians(vsl.skew_angle));
-                    const denom = 1 - tan_h * tan_v;
-                    if (Math.abs(denom) > 1e-9) {
-                        const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) /
-                            denom;
-                        const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                        [tx2, ty2] = [xi, yi];
-                    }
+                    const p = _skewline_intersection(hsl, panel.shared_right_skewline);
+                    if (p)
+                        [tx2, ty2] = p;
                 }
                 if (panel.shared_left_skewline) {
-                    const vsl = panel.shared_left_skewline;
-                    const tan_h = Math.tan(radians(hsl.skew_angle));
-                    const tan_v = Math.tan(radians(vsl.skew_angle));
-                    const denom = 1 - tan_h * tan_v;
-                    if (Math.abs(denom) > 1e-9) {
-                        const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) /
-                            denom;
-                        const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                        [tx1, ty1] = [xi, yi];
-                    }
+                    const p = _skewline_intersection(hsl, panel.shared_left_skewline);
+                    if (p)
+                        [tx1, ty1] = p;
                 }
             }
             _line(border_parent, tx1, ty1, tx2, ty2, border_top_width);
@@ -613,16 +644,9 @@ export class SVGRenderer {
             else if (panel.shared_left_skewline &&
                 !panel.shared_bottom_endpoints &&
                 panel.shared_bottom_skewline) {
-                const vsl = panel.shared_left_skewline;
-                const hsl = panel.shared_bottom_skewline;
-                const tan_h = Math.tan(radians(hsl.skew_angle));
-                const tan_v = Math.tan(radians(vsl.skew_angle));
-                const denom = 1 - tan_h * tan_v;
-                if (Math.abs(denom) > 1e-9) {
-                    const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) / denom;
-                    const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                    [bx1, by1] = [xi, yi];
-                }
+                const p = _skewline_intersection(panel.shared_bottom_skewline, panel.shared_left_skewline);
+                if (p)
+                    [bx1, by1] = p;
             }
             else if (attrs.skewLeft !== 0 && !panel.shared_bottom_skewline) {
                 [bx1, by1] = [bl_x, bl_y];
@@ -645,16 +669,9 @@ export class SVGRenderer {
             else if (panel.shared_right_skewline &&
                 !panel.shared_bottom_endpoints &&
                 panel.shared_bottom_skewline) {
-                const vsl = panel.shared_right_skewline;
-                const hsl = panel.shared_bottom_skewline;
-                const tan_h = Math.tan(radians(hsl.skew_angle));
-                const tan_v = Math.tan(radians(vsl.skew_angle));
-                const denom = 1 - tan_h * tan_v;
-                if (Math.abs(denom) > 1e-9) {
-                    const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) / denom;
-                    const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                    [bx2, by2] = [xi, yi];
-                }
+                const p = _skewline_intersection(panel.shared_bottom_skewline, panel.shared_right_skewline);
+                if (p)
+                    [bx2, by2] = p;
             }
             else if (attrs.skewRight !== 0 && !panel.shared_bottom_skewline) {
                 [bx2, by2] = [br_x, br_y];
@@ -670,28 +687,14 @@ export class SVGRenderer {
             if (panel.shared_bottom_skewline) {
                 const hsl = panel.shared_bottom_skewline;
                 if (panel.shared_right_skewline) {
-                    const vsl = panel.shared_right_skewline;
-                    const tan_h = Math.tan(radians(hsl.skew_angle));
-                    const tan_v = Math.tan(radians(vsl.skew_angle));
-                    const denom = 1 - tan_h * tan_v;
-                    if (Math.abs(denom) > 1e-9) {
-                        const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) /
-                            denom;
-                        const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                        [bx2, by2] = [xi, yi];
-                    }
+                    const p = _skewline_intersection(hsl, panel.shared_right_skewline);
+                    if (p)
+                        [bx2, by2] = p;
                 }
                 if (panel.shared_left_skewline) {
-                    const vsl = panel.shared_left_skewline;
-                    const tan_h = Math.tan(radians(hsl.skew_angle));
-                    const tan_v = Math.tan(radians(vsl.skew_angle));
-                    const denom = 1 - tan_h * tan_v;
-                    if (Math.abs(denom) > 1e-9) {
-                        const xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v - hsl.mid_x * tan_h * tan_v) /
-                            denom;
-                        const yi = hsl.base_y + (xi - hsl.mid_x) * tan_h;
-                        [bx1, by1] = [xi, yi];
-                    }
+                    const p = _skewline_intersection(hsl, panel.shared_left_skewline);
+                    if (p)
+                        [bx1, by1] = p;
                 }
             }
             _line(border_parent, bx1, by1, bx2, by2, border_bottom_width);
@@ -744,9 +747,9 @@ export class SVGRenderer {
                 y: s(box.y + box.h / 2),
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
-                "font-size": "3",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#ff0000",
+                "font-size": PLACEHOLDER_NOTE_FONT_SIZE,
+                "font-family": PLACEHOLDER_FONT_FAMILY,
+                fill: IMAGE_ERROR_TEXT_COLOR,
             })
                 .setText(`Error: ${String(e)}`);
             return;
@@ -757,7 +760,7 @@ export class SVGRenderer {
                 y: s(box.y),
                 width: s(box.w),
                 height: s(box.h),
-                fill: "#cccccc",
+                fill: IMAGE_MISSING_FILL,
                 opacity: "0.3",
             });
             if (clip_path !== null)
@@ -768,21 +771,16 @@ export class SVGRenderer {
                 y: s(box.y + box.h / 2),
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
-                "font-size": "3",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#666666",
+                "font-size": PLACEHOLDER_NOTE_FONT_SIZE,
+                "font-family": PLACEHOLDER_FONT_FAMILY,
+                fill: IMAGE_MISSING_TEXT_COLOR,
             })
                 .setText(`Image not found: ${layer.path}`);
             return;
         }
-        const aspect_ratio_map = {
-            cover: "xMidYMid slice",
-            contain: "xMidYMid meet",
-            fill: "none",
-        };
         // Layer fit, else panel fit, else "cover".
         const fit = layer.imageFit ?? panel.attrs.imageFit ?? "cover";
-        const aspect_ratio = aspect_ratio_map[fit] ?? "xMidYMid slice";
+        const aspect_ratio = IMAGE_FIT_PRESERVE_ASPECT[fit] ?? "xMidYMid slice";
         const img = parent.sub("image", {
             x: s(box.x),
             y: s(box.y),
@@ -810,18 +808,18 @@ export class SVGRenderer {
                 x: s(r.x + r.w - 10),
                 y: s(r.y + 10),
                 "writing-mode": "vertical-rl",
-                "font-size": "8",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#000000",
+                "font-size": PANEL_TEXT_FONT_SIZE,
+                "font-family": PLACEHOLDER_FONT_FAMILY,
+                fill: BODY_TEXT_COLOR,
             });
         }
         else {
             text_elem = parent.sub("text", {
                 x: s(r.x + 10),
                 y: s(r.y + 15),
-                "font-size": "8",
-                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
-                fill: "#000000",
+                "font-size": PANEL_TEXT_FONT_SIZE,
+                "font-family": PLACEHOLDER_FONT_FAMILY,
+                fill: BODY_TEXT_COLOR,
             });
         }
         text_elem.setText(attrs.text);
@@ -908,8 +906,7 @@ export class SVGRenderer {
         // wrap to the inset box width, measuring each glyph's real advance.
         const max_line_w = attrs.wrap ? inset_rect.w : Number.POSITIVE_INFINITY;
         const lines = _wrap_horizontal_styled(styled, max_line_w, font_size, attrs.letterSpacing);
-        const anchor_map = { start: "start", center: "middle", end: "end" };
-        const text_anchor = anchor_map[align] ?? "start";
+        const text_anchor = ALIGN_TO_TEXT_ANCHOR[align] ?? "start";
         let tx;
         if (text_anchor === "start")
             tx = inset_rect.x;
@@ -1122,50 +1119,7 @@ export function _group_styled_runs(line) {
     }
     return runs;
 }
-// ── text wrapping / vertical glyph helpers ──────────────────────────────────
-export function _wrap_horizontal_text(text, chars_per_line) {
-    const lines = [];
-    // Explicit newlines are hard breaks, always honored — split into paragraphs
-    // first, then wrap each. (Previously `\n` was ignored for space-less text,
-    // e.g. Japanese, so manual line breaks had no effect.)
-    for (const para of text.split("\n")) {
-        if (para === "") {
-            lines.push(""); // blank line = empty line (spacing)
-            continue;
-        }
-        // No spaces (CJK): wrap purely by character count.
-        if (!para.includes(" ")) {
-            for (let i = 0; i < para.length; i += chars_per_line) {
-                lines.push(para.slice(i, i + chars_per_line));
-            }
-            continue;
-        }
-        // Word wrap for space-separated text.
-        const words = para.split(" ");
-        let current = "";
-        for (let word of words) {
-            while (word.length > chars_per_line) {
-                if (current) {
-                    lines.push(current);
-                    current = "";
-                }
-                lines.push(word.slice(0, chars_per_line));
-                word = word.slice(chars_per_line);
-            }
-            const candidate = current ? `${current} ${word}` : word;
-            if (candidate.length <= chars_per_line) {
-                current = candidate;
-            }
-            else {
-                if (current)
-                    lines.push(current);
-                current = word;
-            }
-        }
-        lines.push(current);
-    }
-    return lines.length > 0 ? lines : [text];
-}
+// ── vertical glyph helpers ──────────────────────────────────────────────────
 const _VERTICAL_PUNCT_OFFSET_RATIO = [0.42, -0.42];
 const _VERTICAL_TOP_RIGHT_PUNCTUATION = "、。，．,.";
 // Small kana (拗音・促音): in vertical Japanese these sit slightly smaller and
@@ -1181,13 +1135,6 @@ const _SMALL_KANA_DY_RATIO = 0.14; // → up (subtracted from y)
 // font size. Used as the rotation pivot so rotated glyphs stay on the column
 // axis (x = cx) rather than drifting sideways.
 const _GLYPH_CENTER_RATIO = 0.36;
-export function _vertical_glyph_offset(ch, font_size) {
-    if (_VERTICAL_TOP_RIGHT_PUNCTUATION.includes(ch)) {
-        const [rx, ry] = _VERTICAL_PUNCT_OFFSET_RATIO;
-        return [rx * font_size, ry * font_size];
-    }
-    return [0.0, 0.0];
-}
 /**
  * Characters that must be rotated 90° clockwise when set vertically, so a
  * horizontal glyph (long-vowel mark, dashes, brackets, wave dash…) reads as a

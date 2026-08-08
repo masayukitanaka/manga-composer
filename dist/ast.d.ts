@@ -9,8 +9,6 @@
  *     `XXX_KEYS` set at construction time (in parser.ts),
  *   - per-attribute value coercion is driven by the `*_ATTR_TYPES` dispatch
  *     tables, ported verbatim from parser.py's `panel_attr` method.
- *
- * See docs/PORTING_GUIDE.md §4 Stage 2.
  */
 export type Unit = "mm" | "px" | "pt" | "%" | "auto";
 export type Direction = "rtl" | "ltr";
@@ -204,6 +202,7 @@ export declare const PANEL_ATTR_TYPES: Record<string, AttrValueType>;
 export declare const PAGE_ATTR_KEYS: ReadonlySet<string>;
 export declare const PANEL_ATTR_KEYS: ReadonlySet<string>;
 export declare const IMAGE_LAYER_ATTR_KEYS: ReadonlySet<string>;
+export declare const SPEECH_SHARED_ATTR_KEYS: readonly string[];
 export declare const BALLOON_ATTR_KEYS: ReadonlySet<string>;
 export declare const MONOLOGUE_ATTR_KEYS: ReadonlySet<string>;
 //# sourceMappingURL=ast.d.ts.map

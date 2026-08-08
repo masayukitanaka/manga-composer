@@ -6,10 +6,11 @@ import { parse } from "../../src/parser.js";
 import { LayoutEngine, type LayoutedPanel } from "../../src/layout/slicing.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PY_ROOT = join(__dirname, "../../manga-gen-python");
+// `.manga` sources live in the package (examples/, examples2/).
+const PKG_ROOT = join(__dirname, "../..");
 
 function layoutFile(sub: string, name: string): LayoutedPanel[] {
-  const page = parse(readFileSync(join(PY_ROOT, sub, name), "utf-8"));
+  const page = parse(readFileSync(join(PKG_ROOT, sub, name), "utf-8"));
   return new LayoutEngine(page).layout();
 }
 

@@ -4,7 +4,7 @@
  * Exposes the full parse → layout → SVG pipeline with NO Node-only imports:
  * - no `node:fs` / `node:path` (image loading is dependency-injected)
  * - no `@resvg/resvg-js` (PNG rasterization is Node-only; browsers use a WASM
- *   rasterizer or a server round-trip instead — see docs/SPEC.md §6)
+ *   rasterizer or a server round-trip instead — see .private/SPEC.md §6)
  *
  * A browser host resolves panel images by passing its own ImageLoader to
  * SVGRenderer (e.g. one backed by uploaded blobs). Omit it and image panels

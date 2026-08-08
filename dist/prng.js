@@ -4,13 +4,13 @@
  * NOTE: This does NOT replicate CPython's Mersenne Twister stream. Balloon
  * outline jitter will differ in exact wobble pattern from the Python reference
  * (manga-gen-python), while remaining internally deterministic (same input
- * always produces the same output). This is intentional — see
- * docs/PORTING_NOTES.md ("決定論的PRNGはCPythonのMersenne Twisterと非互換").
+ * always produces the same output). This is intentional: the deterministic PRNG
+ * is not stream-compatible with CPython's Mersenne Twister.
  *
  * The seed is derived from the resolved rect + shape via a pure-JS 32-bit hash
  * (FNV-1a). It used to use node:crypto MD5, but the jitter stream was already
  * declared non-reference-compatible (above), so a Node-free hash costs nothing
- * in fidelity and lets this module run in the browser (docs/SPEC.md §12 API-1).
+ * in fidelity and lets this module run in the browser (.private/SPEC.md §12 API-1).
  * Same input → same seed, so a balloon's outline stays stable across renders.
  */
 /**

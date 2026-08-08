@@ -3,20 +3,29 @@
  *
  * Port of manga-gen-python/src/manga_gen/renderer/svg.py — ported LITERALLY,
  * preserving Python method/variable names, branch order, and the explanatory
- * comments (docs/PORTING_GUIDE.md §4 Stage 6). The _render_panel skew /
- * corner-intersection block is the most bug-fragile code in the whole port;
- * keeping the original variable names and comments is what makes a future
- * corner-case bug tractable.
+ * comments. The _render_panel skew / corner-intersection block is the most
+ * bug-fragile code in the whole port; keeping the original variable names and
+ * comments is what makes a future corner-case bug tractable.
  *
  * Balloon rendering (_render_balloon + outline helpers) lives in
  * balloonOutline.ts. Number formatting: we do NOT reproduce Python's str(float)
- * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance
- * (docs/PORTING_NOTES.md).
+ * output (20.0 vs 20); the SVG-diff harness compares numbers with tolerance.
  */
 import type { Page, SpeechAttrs } from "../ast.js";
 import { Rect, LayoutedPanel, LayoutedSpeech } from "../layout/slicing.js";
+import type { SkewLine, SkewHLine } from "../layout/slicing.js";
 import { XmlElement } from "./xml.js";
 import type { ImageLoader } from "./imageLoader.js";
+type Point = [number, number];
+/**
+ * Intersection of a skewed horizontal border line (`hsl`) with a skewed vertical
+ * border line (`vsl`), used to close a skewed panel's corner exactly where the
+ * top/bottom gutter meets the left/right gutter. Returns null when the lines are
+ * (near-)parallel (`1 - tan_h·tan_v ≈ 0`), in which case the caller keeps its
+ * existing endpoint. This is the exact formula that was previously inlined
+ * verbatim at six corner sites in _render_skewed_panel.
+ */
+export declare function _skewline_intersection(hsl: SkewHLine, vsl: SkewLine): Point | null;
 export declare class SVGRenderer {
     page: Page;
     panels: LayoutedPanel[];
@@ -72,8 +81,6 @@ export declare function _group_styled_runs(line: StyledChar[]): {
     italic: boolean;
     bold: boolean;
 }[];
-export declare function _wrap_horizontal_text(text: string, chars_per_line: number): string[];
-export declare function _vertical_glyph_offset(ch: string, font_size: number): [number, number];
 /** Whether a character should be rotated 90° when drawn in vertical text. */
 export declare function _vertical_glyph_rotate(ch: string): boolean;
 /** Whether a character is a small kana that gets shrunk + shifted top-right. */
@@ -87,4 +94,5 @@ export declare function _vertical_glyph_is_small_kana(ch: string): boolean;
  *   - top-right punctuation (、。) nudge toward the top-right.
  */
 export declare function _vertical_glyph_transform(ch: string, font_size: number, px: number, py: number): string;
+export {};
 //# sourceMappingURL=svg.d.ts.map

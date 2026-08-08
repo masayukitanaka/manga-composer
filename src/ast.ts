@@ -9,8 +9,6 @@
  *     `XXX_KEYS` set at construction time (in parser.ts),
  *   - per-attribute value coercion is driven by the `*_ATTR_TYPES` dispatch
  *     tables, ported verbatim from parser.py's `panel_attr` method.
- *
- * See docs/PORTING_GUIDE.md §4 Stage 2.
  */
 
 // ── Enums / literal unions ──────────────────────────────────────────────────
@@ -491,8 +489,10 @@ export const PANEL_ATTR_TYPES: Record<string, AttrValueType> = {
   font_style: "passthrough",
   font_weight: "passthrough",
   wrap: "passthrough",
-  // line_height is a Length (%/mm/unitless) — handled directly in the parser,
-  // not via coerceScalar.
+  // line_height is a Length (%/mm/unitless) resolved directly from the raw value
+  // by the parser (lineHeightLength); its coerced scalar is unused. Listed as
+  // passthrough so coerceScalar recognizes it (it throws on unknown attrs).
+  line_height: "passthrough",
 };
 
 // ── Allowed-key sets (extra="forbid" equivalent) ────────────────────────────
@@ -562,8 +562,9 @@ export const IMAGE_LAYER_ATTR_KEYS: ReadonlySet<string> = new Set([
   "flip_h",
 ]);
 
-export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
-  // shared SpeechAttrs
+// Attributes common to balloon and monologue (the SpeechAttrs base). Kept as a
+// single source of truth so the balloon/monologue key sets can't drift apart.
+export const SPEECH_SHARED_ATTR_KEYS: readonly string[] = [
   "text",
   "text_direction",
   "font_size",
@@ -587,6 +588,10 @@ export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
   "border_color",
   "border",
   "align",
+];
+
+export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
+  ...SPEECH_SHARED_ATTR_KEYS,
   // balloon-specific
   "shape",
   "aspect_ratio",
@@ -598,30 +603,7 @@ export const BALLOON_ATTR_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 export const MONOLOGUE_ATTR_KEYS: ReadonlySet<string> = new Set([
-  // shared SpeechAttrs
-  "text",
-  "text_direction",
-  "font_size",
-  "font_family",
-  "line_height",
-  "letter_spacing",
-  "font_style",
-  "font_weight",
-  "wrap",
-  "padding",
-  "x",
-  "y",
-  "width",
-  "height",
-  "anchor_pos",
-  "margin",
-  "dx",
-  "dy",
-  "z_index",
-  "background",
-  "border_color",
-  "border",
-  "align",
+  ...SPEECH_SHARED_ATTR_KEYS,
   // monologue-specific
   "text_color",
 ]);

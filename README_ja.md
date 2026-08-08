@@ -274,7 +274,7 @@ panel char_a {
    コメント */
 ```
 
-移植元の完全な仕様は [`manga-gen-python/docs/`](manga-gen-python/docs/) ディレクトリ（`DSL.md`、`SPEC.md`）を参照してください。
+完全な DSL 仕様は [`dsl/`](dsl/) ディレクトリ（[`DSL.md`](dsl/DSL.md)、[`DSL_ja.md`](dsl/DSL_ja.md)）を参照してください。
 
 ## 開発
 
@@ -282,22 +282,32 @@ panel char_a {
 npm install          # 依存関係のインストール
 npm run build        # TypeScript を dist/ にコンパイル
 npm run cli -- file.manga -o out.svg   # ビルドせず CLI を実行（tsx 経由）
-npm test             # 単体テスト（vitest）
-npm run compare      # Python 参照実装との出力比較（下記参照）
 ```
 
-### Python 参照実装との照合
+## テスト
 
-本移植は、オリジナルの Python 版 `manga-gen` が生成する参照 SVG と、TS 版の SVG 出力を比較することで検証しています。
+テストは [Vitest](https://vitest.dev/) で書かれており、`test/unit/` にあります。
 
 ```bash
-npm run compare              # examples2/（受け入れ基準のコーパス）を比較
-npm run compare -- --all     # examples/ も比較
-npm run compare -- --png     # PNG のピクセル差分も実行（参考情報）
-npm run generate-references  # 参照 SVG を再生成（Python CLI が必要）
+npm test                       # 全テストを1回実行（vitest run）
+npm run test:watch             # 変更を監視して再実行（ウォッチモード）
+
+# 特定のテストファイルだけ実行
+npx vitest run test/unit/parser.test.ts
+
+# テスト名でフィルタ（部分一致・正規表現）
+npx vitest run -t "skew"
+
+# 意図的に出力を変えたときスナップショットを更新
+npx vitest run -u
 ```
 
-比較は主に構造的（要素ツリー＋数値属性の許容誤差付き比較）です。吹き出しの輪郭は、手描き風のゆらぎに Python 版とは異なる（ただし内部的には決定論的な）PRNG を使っているため、バウンディングボックスのレベルで比較しています。詳細は [`docs/PORTING_NOTES.md`](docs/PORTING_NOTES.md) を参照してください。
+テストがカバーする範囲:
+
+- **単体** — レキサー、パーサー、レイアウトエンジン、シリアライザのラウンドトリップ、テキスト/フォントのメトリクス、吹き出しジオメトリ、skew のコーナーケース。
+- **ゴールデン SVG**（`compile.test.ts`）— 同梱の `examples/`・`examples2/` の `.manga` をコンパイルし、`test/references/` の参照 SVG と構造的に差分比較（要素ツリー＋数値属性を許容誤差付きで比較）。吹き出しの輪郭は、内部的に決定論的だがオリジナルの Python 版 `manga-gen` とは揺らぎが異なる PRNG を使うため、バウンディングボックスのレベルで比較します。
+
+参照 SVG はリポジトリに同梱されているため、テスト一式は自己完結しており、`npm test` は開発依存以外に何も必要としません。一部の `examples/` は TS 版固有の機能（画像レイヤー、リッチテキスト）を使い参照 SVG を持たないため、ゴールデン差分ではスキップされますが、他のテストではカバーされています。
 
 ## ライセンス
 

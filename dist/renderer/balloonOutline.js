@@ -9,7 +9,7 @@
  *
  * The seeded jitter uses src/prng.ts (mulberry32), NOT CPython's Mersenne
  * Twister — so the exact wobble differs from the Python reference by design
- * (docs/PORTING_NOTES.md). Output is internally deterministic. The SVG-diff
+ * Output is internally deterministic. The SVG-diff
  * harness relaxes balloon <path> comparison to bounding-box level.
  */
 import { SeededJitter, speechSeed } from "../prng.js";

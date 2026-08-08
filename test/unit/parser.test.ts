@@ -7,7 +7,8 @@ import { ParseError } from "../../src/errors.js";
 import type { LayoutNode, PanelNode } from "../../src/ast.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PY_ROOT = join(__dirname, "../../manga-gen-python");
+// `.manga` sources live in the package (examples/, examples2/).
+const PKG_ROOT = join(__dirname, "../..");
 
 function collectPanels(nodes: LayoutNode[], out: PanelNode[] = []): PanelNode[] {
   for (const n of nodes) {
@@ -18,7 +19,7 @@ function collectPanels(nodes: LayoutNode[], out: PanelNode[] = []): PanelNode[] 
 }
 
 function parseFile(sub: string, name: string) {
-  return parse(readFileSync(join(PY_ROOT, sub, name), "utf-8"));
+  return parse(readFileSync(join(PKG_ROOT, sub, name), "utf-8"));
 }
 
 describe("parser", () => {
@@ -109,6 +110,20 @@ describe("parser", () => {
     expect(() => parse(`page { panel p { bogus: 1 } }`)).toThrow(/Unknown panel attribute: bogus/);
   });
 
+  it("rejects a non-positive row height / col width", () => {
+    expect(() => parse(`page { row height: -5mm { panel a } row { panel b } }`)).toThrow(
+      /row height must be positive/,
+    );
+    expect(() => parse(`page { row height: 0mm { panel a } row { panel b } }`)).toThrow(
+      /row height must be positive/,
+    );
+    expect(() => parse(`page { row { col width: 0% { panel a } col { panel b } } }`)).toThrow(
+      /col width must be positive/,
+    );
+    // A valid positive size still parses.
+    expect(() => parse(`page { row height: 40% { panel a } row { panel b } }`)).not.toThrow();
+  });
+
   it("truncates float importance like Python int(float(x))", () => {
     const page = parse(`page { panel p { importance: 2 } }`);
     expect((page.children[0] as PanelNode).attrs.importance).toBe(2);
@@ -131,7 +146,7 @@ describe("parser", () => {
   });
 
   it("parses every examples/ file without error", () => {
-    const dir = join(PY_ROOT, "examples");
+    const dir = join(PKG_ROOT, "examples");
     const files = readdirSync(dir).filter((f) => f.endsWith(".manga"));
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) {

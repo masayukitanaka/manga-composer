@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { tokenize, type Token } from "../../src/lexer.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PY_ROOT = join(__dirname, "../../manga-gen-python");
+// `.manga` sources live in the package (examples/, examples2/).
+const PKG_ROOT = join(__dirname, "../..");
 
 function types(src: string): string[] {
   return tokenize(src).map((t) => t.type);
@@ -63,7 +64,7 @@ describe("lexer", () => {
 
   it("tokenizes every examples/ and examples2/ file without error", () => {
     for (const sub of ["examples", "examples2"] as const) {
-      const dir = join(PY_ROOT, sub);
+      const dir = join(PKG_ROOT, sub);
       const { readdirSync } = require("node:fs") as typeof import("node:fs");
       const files = readdirSync(dir).filter((f: string) => f.endsWith(".manga"));
       expect(files.length).toBeGreaterThan(0);

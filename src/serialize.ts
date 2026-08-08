@@ -2,7 +2,7 @@
  * AST → .manga source serializer (the inverse of parse()).
  *
  * `parse()` normalizes everything and materializes defaults, so a faithful
- * "write back exactly what the user typed" is impossible (docs/SPEC.md §3). This
+ * "write back exactly what the user typed" is impossible (.private/SPEC.md §3). This
  * serializer instead emits a canonical .manga document that RE-PARSES to an
  * equivalent AST: only attributes that differ from their defaults are written,
  * using the DSL's snake_case attribute names.

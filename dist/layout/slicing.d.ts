@@ -3,10 +3,10 @@
  *
  * Port of manga-gen-python/src/manga_gen/layout/slicing.py.
  *
- * Ported LITERALLY, preserving Python method/variable names and branch order
- * (docs/PORTING_GUIDE.md §4 Stage 5): the shared-border / skew geometry is
- * bug-fragile and any "cleanup" risks changing float rounding or branch order
- * in ways that surface as a subtly-misplaced corner in one example.
+ * Ported LITERALLY, preserving Python method/variable names and branch order:
+ * the shared-border / skew geometry is bug-fragile and any "cleanup" risks
+ * changing float rounding or branch order in ways that surface as a
+ * subtly-misplaced corner in one example.
  */
 import { type Page, type Length, type PanelAttrs, type ImageLayer, type SpeechNode, type BalloonAttrs, type MonologueAttrs } from "../ast.js";
 export declare class Rect {

@@ -12,7 +12,7 @@
  *   CNAME        : identifier, [a-zA-Z_] then [a-zA-Z0-9_]
  *   %ignore whitespace, line comments, and block comments
  *
- * NOTE (docs/PORTING_NOTES.md): we do NOT reproduce Lark's keyword-promotion
+ * NOTE: we do NOT reproduce Lark's keyword-promotion
  * terminals (WIDTH_KW/HEIGHT_KW/ALIGN_KW/GUTTER_KW). width, height, align,
  * gutter, the margin_ and skew_ families, and panel/row/col/page/balloon/
  * monologue are all lexed uniformly as IDENT; the parser decides meaning from

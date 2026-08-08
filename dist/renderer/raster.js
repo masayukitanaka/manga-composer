@@ -4,7 +4,7 @@
  * Port of manga-gen-python/src/manga_gen/renderer/raster.py (was CairoSVG).
  * resvg is a DIFFERENT rasterizer than CairoSVG — antialiasing/font rendering
  * differs pixel-for-pixel even from identical SVG. PNG parity is secondary per
- * the acceptance criteria (docs/PORTING_GUIDE.md §0).
+ * the acceptance criteria.
  *
  * Two call shapes mirror cli.py:
  *   - exact pixel size (px-unit page sizes): render at a fixed width in px.
