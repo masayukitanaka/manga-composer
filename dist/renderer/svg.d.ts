@@ -44,6 +44,12 @@ export declare class SVGRenderer {
     private _render_description;
     private _render_rect_panel;
     private _render_skewed_panel;
+    /** Fill the clipped panel trapezoid with the panel background. */
+    private _skew_fill;
+    /** Register the per-panel clipPath and attach it to the border group. */
+    private _skew_clip;
+    /** Draw the four (possibly-skewed) border edges. */
+    private _skew_borders;
     /**
      * Draw a panel's image layers back-to-front (array order = bottom→top; SVG's
      * later-wins painting matches). Each layer fits into its own placement rect

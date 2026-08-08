@@ -108,6 +108,157 @@ function _panel_fill_polygon(
 }
 
 /**
+ * Geometry of a skewed panel, computed once and consumed by the fill, clip, and
+ * border passes. All fields are absolute mm page coordinates. Extracted verbatim
+ * from _render_skewed_panel so the three passes share one source of truth.
+ */
+interface SkewCorners {
+  // Polygon corners: top-left, bottom-left, top-right, bottom-right.
+  tl_x: number;
+  bl_x: number;
+  tr_x: number;
+  br_x: number;
+  tl_y: number;
+  tr_y: number;
+  bl_y: number;
+  br_y: number;
+  // Clip Y bounds (top/bottom of the clipped trapezoid).
+  clip_y_min: number;
+  clip_y_max: number;
+  // Vertical-border Y extents (used when a side has no skewline of its own).
+  left_top_y: number;
+  right_top_y: number;
+  left_bottom_y: number;
+  right_bottom_y: number;
+}
+
+/**
+ * Compute the corner/edge geometry for a skewed panel. Pure function of the
+ * panel's layout state (shared skewlines/endpoints, own skew angles) and rect —
+ * no drawing. The formulas are the ones previously inlined at the top of
+ * _render_skewed_panel; branch order and arithmetic are unchanged.
+ */
+function _skew_corners(panel: LayoutedPanel, r: Rect): SkewCorners {
+  const attrs = panel.attrs;
+
+  const _eff = (own: number, adj: number): number => {
+    if (own !== 0 && adj !== 0) return (own + adj) / 2;
+    return own + adj;
+  };
+
+  // left_skew/right_skew/top_skew/bottom_skew computed for parity with Python;
+  // only own skews feed the polygon-corner offsets below.
+  void _eff(attrs.skewLeft, panel.adjacent_left_skew);
+  void _eff(attrs.skewRight, panel.adjacent_right_skew);
+  const top_skew = _eff(attrs.skewTop, panel.adjacent_top_skew);
+  const bottom_skew = _eff(attrs.skewBottom, panel.adjacent_bottom_skew);
+
+  const left_base_x = panel.shared_left_x !== null ? panel.shared_left_x : r.x;
+  const right_base_x = panel.shared_right_x !== null ? panel.shared_right_x : r.x + r.w;
+
+  const top_offset_y = top_skew !== 0 ? (r.w / 2) * Math.tan(radians(top_skew)) : 0;
+  const bottom_offset_y = bottom_skew !== 0 ? (r.w / 2) * Math.tan(radians(bottom_skew)) : 0;
+  const own_left_offset =
+    attrs.skewLeft !== 0 ? (r.h / 2) * Math.tan(radians(attrs.skewLeft)) : 0;
+  const own_right_offset =
+    attrs.skewRight !== 0 ? (r.h / 2) * Math.tan(radians(attrs.skewRight)) : 0;
+
+  // ── Polygon corners ──────────────────────────────────────────────────
+  let tl_x: number;
+  let bl_x: number;
+  if (panel.shared_left_skewline) {
+    tl_x = panel.shared_left_skewline.x_at(r.y);
+    bl_x = panel.shared_left_skewline.x_at(r.y + r.h);
+  } else if (panel.shared_left_x !== null) {
+    tl_x = bl_x = left_base_x;
+  } else {
+    tl_x = left_base_x - own_left_offset;
+    bl_x = left_base_x + own_left_offset;
+  }
+
+  let tr_x: number;
+  let br_x: number;
+  if (panel.shared_right_skewline) {
+    tr_x = panel.shared_right_skewline.x_at(r.y);
+    br_x = panel.shared_right_skewline.x_at(r.y + r.h);
+  } else if (panel.shared_right_x !== null) {
+    tr_x = br_x = right_base_x;
+  } else {
+    tr_x = right_base_x + own_right_offset;
+    br_x = right_base_x - own_right_offset;
+  }
+
+  let tl_y: number;
+  let tr_y: number;
+  if (panel.shared_top_skewline) {
+    if (panel.shared_top_endpoints) {
+      const [_ep_tx1, _ep_ty1, , ] = panel.shared_top_endpoints;
+      const _tan = Math.tan(radians(panel.shared_top_skewline.skew_angle));
+      const _mid_x = panel.shared_top_skewline.mid_x;
+      const _base_y_corrected = _ep_ty1 - (_ep_tx1 - _mid_x) * _tan;
+      tl_y = _base_y_corrected + (tl_x - _mid_x) * _tan;
+      tr_y = _base_y_corrected + (tr_x - _mid_x) * _tan;
+    } else {
+      tl_y = panel.shared_top_skewline.y_at(tl_x);
+      tr_y = panel.shared_top_skewline.y_at(tr_x);
+    }
+  } else {
+    tl_y = r.y - top_offset_y;
+    tr_y = r.y + top_offset_y;
+  }
+
+  let bl_y: number;
+  let br_y: number;
+  if (panel.shared_bottom_skewline) {
+    bl_y = panel.shared_bottom_skewline.y_at(bl_x);
+    br_y = panel.shared_bottom_skewline.y_at(br_x);
+  } else {
+    br_y = r.y + r.h + bottom_offset_y;
+    bl_y = r.y + r.h - bottom_offset_y;
+  }
+
+  // ── Clip Y bounds ────────────────────────────────────────────────────
+  const clip_y_min = panel.shared_top_skewline ? Math.min(tl_y, tr_y) : r.y;
+  const clip_y_max = panel.shared_bottom_skewline ? Math.max(bl_y, br_y) : r.y + r.h;
+
+  // ── Vertical border Y extents ────────────────────────────────────────
+  let left_top_y: number;
+  let right_top_y: number;
+  if (panel.shared_top_endpoints) {
+    const [, _ty1, , _ty2] = panel.shared_top_endpoints;
+    if (panel.shared_left_skewline) left_top_y = r.y;
+    else if (panel.shared_top_skewline) left_top_y = _ty1;
+    else left_top_y = r.y;
+    if (panel.shared_right_skewline) right_top_y = r.y;
+    else if (panel.shared_top_skewline) right_top_y = _ty2;
+    else right_top_y = r.y;
+  } else {
+    left_top_y = right_top_y = r.y;
+  }
+
+  let left_bottom_y: number;
+  let right_bottom_y: number;
+  if (panel.shared_bottom_endpoints) {
+    if (panel.shared_left_skewline) left_bottom_y = r.y + r.h;
+    else if (panel.shared_bottom_skewline)
+      left_bottom_y = panel.shared_bottom_skewline.y_at(r.x);
+    else left_bottom_y = r.y + r.h;
+    if (panel.shared_right_skewline) right_bottom_y = r.y + r.h;
+    else if (panel.shared_bottom_skewline)
+      right_bottom_y = panel.shared_bottom_skewline.y_at(r.x + r.w);
+    else right_bottom_y = r.y + r.h;
+  } else {
+    left_bottom_y = right_bottom_y = r.y + r.h;
+  }
+
+  return {
+    tl_x, bl_x, tr_x, br_x, tl_y, tr_y, bl_y, br_y,
+    clip_y_min, clip_y_max,
+    left_top_y, right_top_y, left_bottom_y, right_bottom_y,
+  };
+}
+
+/**
  * Intersection of a skewed horizontal border line (`hsl`) with a skewed vertical
  * border line (`vsl`), used to close a skewed panel's corner exactly where the
  * top/bottom gutter meets the left/right gutter. Returns null when the lines are
@@ -459,159 +610,94 @@ export class SVGRenderer {
     r: Rect,
     defs: XmlElement | null,
   ): void {
+    const c = _skew_corners(panel, r);
+    this._skew_fill(g, panel, r, c);
+    this._skew_clip(gb, panel, r, c, defs);
+    this._skew_borders(border_parent, panel, r, c);
+  }
+
+  /** Fill the clipped panel trapezoid with the panel background. */
+  private _skew_fill(g: XmlElement, panel: LayoutedPanel, r: Rect, c: SkewCorners): void {
     const attrs = panel.attrs;
-
-    const _eff = (own: number, adj: number): number => {
-      if (own !== 0 && adj !== 0) return (own + adj) / 2;
-      return own + adj;
-    };
-
-    // left_skew/right_skew/top_skew/bottom_skew computed for parity with
-    // Python; only own skews feed the polygon-corner offsets below.
-    void _eff(attrs.skewLeft, panel.adjacent_left_skew);
-    void _eff(attrs.skewRight, panel.adjacent_right_skew);
-    const top_skew = _eff(attrs.skewTop, panel.adjacent_top_skew);
-    const bottom_skew = _eff(attrs.skewBottom, panel.adjacent_bottom_skew);
-
-    const left_base_x = panel.shared_left_x !== null ? panel.shared_left_x : r.x;
-    const right_base_x = panel.shared_right_x !== null ? panel.shared_right_x : r.x + r.w;
-    // (top_edge_y/bottom_edge_y are computed in Python but unused there.)
-
-    const top_offset_y = top_skew !== 0 ? (r.w / 2) * Math.tan(radians(top_skew)) : 0;
-    const bottom_offset_y =
-      bottom_skew !== 0 ? (r.w / 2) * Math.tan(radians(bottom_skew)) : 0;
-    const own_left_offset =
-      attrs.skewLeft !== 0 ? (r.h / 2) * Math.tan(radians(attrs.skewLeft)) : 0;
-    const own_right_offset =
-      attrs.skewRight !== 0 ? (r.h / 2) * Math.tan(radians(attrs.skewRight)) : 0;
-
-    // ── Polygon corners ──────────────────────────────────────────────────
-    let tl_x: number;
-    let bl_x: number;
-    if (panel.shared_left_skewline) {
-      tl_x = panel.shared_left_skewline.x_at(r.y);
-      bl_x = panel.shared_left_skewline.x_at(r.y + r.h);
-    } else if (panel.shared_left_x !== null) {
-      tl_x = bl_x = left_base_x;
-    } else {
-      tl_x = left_base_x - own_left_offset;
-      bl_x = left_base_x + own_left_offset;
-    }
-
-    let tr_x: number;
-    let br_x: number;
-    if (panel.shared_right_skewline) {
-      tr_x = panel.shared_right_skewline.x_at(r.y);
-      br_x = panel.shared_right_skewline.x_at(r.y + r.h);
-    } else if (panel.shared_right_x !== null) {
-      tr_x = br_x = right_base_x;
-    } else {
-      tr_x = right_base_x + own_right_offset;
-      br_x = right_base_x - own_right_offset;
-    }
-
-    let tl_y: number;
-    let tr_y: number;
-    if (panel.shared_top_skewline) {
-      if (panel.shared_top_endpoints) {
-        const [_ep_tx1, _ep_ty1, , ] = panel.shared_top_endpoints;
-        const _tan = Math.tan(radians(panel.shared_top_skewline.skew_angle));
-        const _mid_x = panel.shared_top_skewline.mid_x;
-        const _base_y_corrected = _ep_ty1 - (_ep_tx1 - _mid_x) * _tan;
-        tl_y = _base_y_corrected + (tl_x - _mid_x) * _tan;
-        tr_y = _base_y_corrected + (tr_x - _mid_x) * _tan;
-      } else {
-        tl_y = panel.shared_top_skewline.y_at(tl_x);
-        tr_y = panel.shared_top_skewline.y_at(tr_x);
-      }
-    } else {
-      tl_y = r.y - top_offset_y;
-      tr_y = r.y + top_offset_y;
-    }
-
-    let bl_y: number;
-    let br_y: number;
-    if (panel.shared_bottom_skewline) {
-      bl_y = panel.shared_bottom_skewline.y_at(bl_x);
-      br_y = panel.shared_bottom_skewline.y_at(br_x);
-    } else {
-      br_y = r.y + r.h + bottom_offset_y;
-      bl_y = r.y + r.h - bottom_offset_y;
-    }
-
-    // ── Background: fill the clipped panel trapezoid ─────────────────────
-    const clip_y_min = panel.shared_top_skewline ? Math.min(tl_y, tr_y) : r.y;
-    const clip_y_max = panel.shared_bottom_skewline ? Math.max(bl_y, br_y) : r.y + r.h;
     const clip_x_min =
-      panel.shared_left_skewline || attrs.skewLeft !== 0 ? Math.min(tl_x, bl_x) : r.x;
+      panel.shared_left_skewline || attrs.skewLeft !== 0 ? Math.min(c.tl_x, c.bl_x) : r.x;
     const clip_x_max =
-      panel.shared_right_skewline || attrs.skewRight !== 0 ? Math.max(tr_x, br_x) : r.x + r.w;
+      panel.shared_right_skewline || attrs.skewRight !== 0 ? Math.max(c.tr_x, c.br_x) : r.x + r.w;
     const poly_pts = _panel_fill_polygon(
-      tl_x,
-      tl_y,
-      tr_x,
-      tr_y,
-      br_x,
-      br_y,
-      bl_x,
-      bl_y,
+      c.tl_x,
+      c.tl_y,
+      c.tr_x,
+      c.tr_y,
+      c.br_x,
+      c.br_y,
+      c.bl_x,
+      c.bl_y,
       clip_x_min,
-      clip_y_min,
+      c.clip_y_min,
       clip_x_max,
-      clip_y_max,
+      c.clip_y_max,
     );
     if (poly_pts.length > 0) {
       const points_str = poly_pts.map(([x, y]) => `${x},${y}`).join(" ");
       g.sub("polygon", { points: points_str, fill: attrs.background, stroke: "none" });
     }
+  }
 
-    // ── Border lines ─────────────────────────────────────────────────────
+  /** Register the per-panel clipPath and attach it to the border group. */
+  private _skew_clip(
+    gb: XmlElement,
+    panel: LayoutedPanel,
+    r: Rect,
+    c: SkewCorners,
+    defs: XmlElement | null,
+  ): void {
+    if (defs === null) return;
+    const clip_id = `clip_${panel.id}`;
+    const cp = defs.sub("clipPath", { id: clip_id });
+    const clip_rect_y = c.clip_y_min;
+    const clip_rect_h = c.clip_y_max - clip_rect_y;
+    let clip_rect_x = r.x;
+    let clip_rect_x2 = r.x + r.w;
+    if (panel.shared_left_skewline && panel.shared_left_skewline_y) {
+      const [y_top, y_bot] = panel.shared_left_skewline_y;
+      clip_rect_x = Math.min(
+        clip_rect_x,
+        panel.shared_left_skewline.x_at(y_top),
+        panel.shared_left_skewline.x_at(y_bot),
+      );
+    }
+    if (panel.shared_right_skewline && panel.shared_right_skewline_y) {
+      const [y_top, y_bot] = panel.shared_right_skewline_y;
+      clip_rect_x2 = Math.max(
+        clip_rect_x2,
+        panel.shared_right_skewline.x_at(y_top),
+        panel.shared_right_skewline.x_at(y_bot),
+      );
+    }
+    cp.sub("rect", {
+      x: s(clip_rect_x),
+      y: s(clip_rect_y),
+      width: s(clip_rect_x2 - clip_rect_x),
+      height: s(clip_rect_h),
+    });
+    gb.set("clip-path", `url(#${clip_id})`);
+  }
+
+  /** Draw the four (possibly-skewed) border edges. */
+  private _skew_borders(
+    border_parent: XmlElement,
+    panel: LayoutedPanel,
+    r: Rect,
+    c: SkewCorners,
+  ): void {
+    const attrs = panel.attrs;
     const border_left_width = attrs.borderLeft !== null ? attrs.borderLeft : attrs.border;
     const border_right_width = attrs.borderRight !== null ? attrs.borderRight : attrs.border;
     const border_top_width = attrs.borderTop !== null ? attrs.borderTop : attrs.border;
     const border_bottom_width = attrs.borderBottom !== null ? attrs.borderBottom : attrs.border;
 
-    if (defs !== null) {
-      const clip_id = `clip_${panel.id}`;
-      const cp = defs.sub("clipPath", { id: clip_id });
-      const clip_rect_y = clip_y_min;
-      const clip_rect_h = clip_y_max - clip_rect_y;
-      let clip_rect_x = r.x;
-      let clip_rect_x2 = r.x + r.w;
-      if (panel.shared_left_skewline && panel.shared_left_skewline_y) {
-        const [y_top, y_bot] = panel.shared_left_skewline_y;
-        clip_rect_x = Math.min(
-          clip_rect_x,
-          panel.shared_left_skewline.x_at(y_top),
-          panel.shared_left_skewline.x_at(y_bot),
-        );
-      }
-      if (panel.shared_right_skewline && panel.shared_right_skewline_y) {
-        const [y_top, y_bot] = panel.shared_right_skewline_y;
-        clip_rect_x2 = Math.max(
-          clip_rect_x2,
-          panel.shared_right_skewline.x_at(y_top),
-          panel.shared_right_skewline.x_at(y_bot),
-        );
-      }
-      cp.sub("rect", {
-        x: s(clip_rect_x),
-        y: s(clip_rect_y),
-        width: s(clip_rect_x2 - clip_rect_x),
-        height: s(clip_rect_h),
-      });
-      gb.set("clip-path", `url(#${clip_id})`);
-    }
-
-    const _line = (
-      parent: XmlElement,
-      x1: number,
-      y1: number,
-      x2: number,
-      y2: number,
-      width: number,
-    ): void => {
-      parent.sub("line", {
+    const _line = (x1: number, y1: number, x2: number, y2: number, width: number): void => {
+      border_parent.sub("line", {
         x1: s(x1),
         y1: s(y1),
         x2: s(x2),
@@ -620,36 +706,6 @@ export class SVGRenderer {
         "stroke-width": s(width),
       });
     };
-
-    // Vertical border Y extents.
-    let left_top_y: number;
-    let right_top_y: number;
-    if (panel.shared_top_endpoints) {
-      const [, _ty1, , _ty2] = panel.shared_top_endpoints;
-      if (panel.shared_left_skewline) left_top_y = r.y;
-      else if (panel.shared_top_skewline) left_top_y = _ty1;
-      else left_top_y = r.y;
-      if (panel.shared_right_skewline) right_top_y = r.y;
-      else if (panel.shared_top_skewline) right_top_y = _ty2;
-      else right_top_y = r.y;
-    } else {
-      left_top_y = right_top_y = r.y;
-    }
-
-    let left_bottom_y: number;
-    let right_bottom_y: number;
-    if (panel.shared_bottom_endpoints) {
-      if (panel.shared_left_skewline) left_bottom_y = r.y + r.h;
-      else if (panel.shared_bottom_skewline)
-        left_bottom_y = panel.shared_bottom_skewline.y_at(r.x);
-      else left_bottom_y = r.y + r.h;
-      if (panel.shared_right_skewline) right_bottom_y = r.y + r.h;
-      else if (panel.shared_bottom_skewline)
-        right_bottom_y = panel.shared_bottom_skewline.y_at(r.x + r.w);
-      else right_bottom_y = r.y + r.h;
-    } else {
-      left_bottom_y = right_bottom_y = r.y + r.h;
-    }
 
     // Left border.
     if (panel.draw_left && border_left_width > 0) {
@@ -660,13 +716,11 @@ export class SVGRenderer {
           : [r.y, r.y + r.h];
         if (!panel.shared_top_skewline) y1 = r.y;
         if (!panel.shared_bottom_skewline) y2 = r.y + r.h;
-        const x1_sl = sl.x_at(y1);
-        const x2_sl = sl.x_at(y2);
-        _line(border_parent, x1_sl, y1, x2_sl, y2, border_left_width);
+        _line(sl.x_at(y1), y1, sl.x_at(y2), y2, border_left_width);
       } else if (attrs.skewLeft !== 0) {
-        _line(border_parent, tl_x, tl_y, bl_x, bl_y, border_left_width);
+        _line(c.tl_x, c.tl_y, c.bl_x, c.bl_y, border_left_width);
       } else {
-        _line(border_parent, r.x, left_top_y, r.x, left_bottom_y, border_left_width);
+        _line(r.x, c.left_top_y, r.x, c.left_bottom_y, border_left_width);
       }
     }
 
@@ -679,13 +733,11 @@ export class SVGRenderer {
           : [r.y, r.y + r.h];
         if (!panel.shared_top_skewline) y1 = r.y;
         if (!panel.shared_bottom_skewline) y2 = r.y + r.h;
-        const x1_sl = sl.x_at(y1);
-        const x2_sl = sl.x_at(y2);
-        _line(border_parent, x1_sl, y1, x2_sl, y2, border_right_width);
+        _line(sl.x_at(y1), y1, sl.x_at(y2), y2, border_right_width);
       } else if (attrs.skewRight !== 0) {
-        _line(border_parent, tr_x, tr_y, br_x, br_y, border_right_width);
+        _line(c.tr_x, c.tr_y, c.br_x, c.br_y, border_right_width);
       } else {
-        _line(border_parent, r.x + r.w, right_top_y, r.x + r.w, right_bottom_y, border_right_width);
+        _line(r.x + r.w, c.right_top_y, r.x + r.w, c.right_bottom_y, border_right_width);
       }
     }
 
@@ -704,20 +756,20 @@ export class SVGRenderer {
       if (panel.shared_top_endpoints) {
         [tx1, ty1, tx2, ty2] = panel.shared_top_endpoints;
       } else {
-        [tx1, ty1, tx2, ty2] = [tl_x, tl_y, tr_x, tr_y];
+        [tx1, ty1, tx2, ty2] = [c.tl_x, c.tl_y, c.tr_x, c.tr_y];
       }
       if (!panel.shared_top_skewline) {
         if (panel.shared_left_skewline) {
           tx1 = panel.shared_left_skewline.x_at(r.y);
           ty1 = r.y;
         } else if (attrs.skewLeft !== 0) {
-          [tx1, ty1] = [tl_x, tl_y];
+          [tx1, ty1] = [c.tl_x, c.tl_y];
         }
         if (panel.shared_right_skewline) {
           tx2 = panel.shared_right_skewline.x_at(r.y);
           ty2 = r.y;
         } else if (attrs.skewRight !== 0) {
-          [tx2, ty2] = [tr_x, tr_y];
+          [tx2, ty2] = [c.tr_x, c.tr_y];
         }
       } else {
         const hsl = panel.shared_top_skewline;
@@ -730,7 +782,7 @@ export class SVGRenderer {
           if (p) [tx1, ty1] = p;
         }
       }
-      _line(border_parent, tx1, ty1, tx2, ty2, border_top_width);
+      _line(tx1, ty1, tx2, ty2, border_top_width);
     }
 
     // Bottom border.
@@ -742,7 +794,7 @@ export class SVGRenderer {
       if (panel.shared_bottom_endpoints) {
         [bx1, by1, bx2, by2] = panel.shared_bottom_endpoints;
       } else {
-        [bx1, by1, bx2, by2] = [bl_x, bl_y, br_x, br_y];
+        [bx1, by1, bx2, by2] = [c.bl_x, c.bl_y, c.br_x, c.br_y];
       }
       if (panel.shared_left_skewline && !panel.shared_bottom_skewline) {
         let sl_y_end = panel.shared_left_skewline_y ? panel.shared_left_skewline_y[1] : by1;
@@ -758,7 +810,7 @@ export class SVGRenderer {
         const p = _skewline_intersection(panel.shared_bottom_skewline, panel.shared_left_skewline);
         if (p) [bx1, by1] = p;
       } else if (attrs.skewLeft !== 0 && !panel.shared_bottom_skewline) {
-        [bx1, by1] = [bl_x, bl_y];
+        [bx1, by1] = [c.bl_x, c.bl_y];
       } else {
         if (panel.shared_bottom_endpoints) {
           // by1 already correct
@@ -780,7 +832,7 @@ export class SVGRenderer {
         const p = _skewline_intersection(panel.shared_bottom_skewline, panel.shared_right_skewline);
         if (p) [bx2, by2] = p;
       } else if (attrs.skewRight !== 0 && !panel.shared_bottom_skewline) {
-        [bx2, by2] = [br_x, br_y];
+        [bx2, by2] = [c.br_x, c.br_y];
       } else {
         if (panel.shared_bottom_endpoints) {
           // by2 already correct
@@ -799,7 +851,7 @@ export class SVGRenderer {
           if (p) [bx1, by1] = p;
         }
       }
-      _line(border_parent, bx1, by1, bx2, by2, border_bottom_width);
+      _line(bx1, by1, bx2, by2, border_bottom_width);
     }
   }
 
