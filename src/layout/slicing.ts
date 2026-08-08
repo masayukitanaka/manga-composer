@@ -69,41 +69,47 @@ export class SkewHLine {
   }
 }
 
+/**
+ * Shared vertical border (left or right edge of a panel) with an adjacent panel.
+ * Groups the correlated fields that used to be loose on LayoutedPanel
+ * (shared_left_x, shared_left_skewline, shared_left_skewline_y, draw_left,
+ * adjacent_left_skew) so their relationship is explicit: e.g. `skewline` present
+ * implies `skewlineY` is meaningful.
+ */
+export class VBorder {
+  draw = true; // false suppresses this edge (avoids double-drawing a flat shared border)
+  adjacentSkew = 0.0; // skew angle contributed by the neighbouring panel
+  x: number | null = null; // shared boundary X (gutter middle), null when not shared
+  skewline: SkewLine | null = null; // diagonal descriptor for a skewed gutter
+  skewlineY: [number, number] | null = null; // Y range over which `skewline` is valid
+}
+
+/**
+ * Shared horizontal border (top or bottom edge). Mirror of VBorder for the
+ * top/bottom axis: `skewline` is a SkewHLine and the endpoint tuple replaces the
+ * Y-range span.
+ */
+export class HBorder {
+  draw = true;
+  adjacentSkew = 0.0;
+  y: number | null = null; // shared boundary Y (gutter middle)
+  skewline: SkewHLine | null = null;
+  endpoints: [number, number, number, number] | null = null; // (left_x, left_y, right_x, right_y)
+}
+
 /** A panel with computed layout (absolute coordinates). */
 export class LayoutedPanel {
   id: string;
   rect: Rect;
   attrs: PanelAttrs;
-  draw_left = true;
-  draw_right = true;
-  draw_top = true;
-  draw_bottom = true;
-  // Skew values from adjacent panels for shared borders
-  adjacent_left_skew = 0.0;
-  adjacent_right_skew = 0.0;
-  adjacent_top_skew = 0.0;
-  adjacent_bottom_skew = 0.0;
-  // Position of shared borders (middle of gutter) — used for polygon base
-  shared_left_x: number | null = null;
-  shared_right_x: number | null = null;
-  shared_top_y: number | null = null;
-  shared_bottom_y: number | null = null;
-  // Skew line descriptors for vertical shared borders.
-  shared_left_skewline: SkewLine | null = null;
-  shared_right_skewline: SkewLine | null = null;
-  // Y range over which the left/right skewline is valid (panel overlap span).
-  shared_left_skewline_y: [number, number] | null = null;
-  shared_right_skewline_y: [number, number] | null = null;
-  // Skew line descriptors for horizontal shared borders (top/bottom).
-  shared_top_skewline: SkewHLine | null = null;
-  shared_bottom_skewline: SkewHLine | null = null;
-  // Endpoint tuples for horizontal shared borders: (left_x, left_y, right_x, right_y)
-  shared_top_endpoints: [number, number, number, number] | null = null;
-  shared_bottom_endpoints: [number, number, number, number] | null = null;
+  // Shared-border state, one value object per edge. Written by the shared-border
+  // resolution passes, read by the renderer.
+  left = new VBorder();
+  right = new VBorder();
+  top = new HBorder();
+  bottom = new HBorder();
   // balloon/monologue nested inside this panel (AST nodes)
   speeches: SpeechNode[] = [];
-  // Set by _link_tb; consumed by _adjust_skewline_y_for_slanted_top.
-  _top_border_skewline?: SkewHLine;
 
   constructor(id: string, rect: Rect, attrs: PanelAttrs, speeches: SpeechNode[] = []) {
     this.id = id;
@@ -229,12 +235,120 @@ export function measureTextWidth(text: string, font_size: number, letter_spacing
   return w;
 }
 
+/** Element predicates + advance for generic width-based wrapping. */
+export interface WrapOps<T> {
+  advance: (t: T) => number; // width (mm) of one element
+  isNewline: (t: T) => boolean;
+  isSpace: (t: T) => boolean;
+  space: () => T; // a space element, inserted when rejoining words
+}
+
 /**
- * Count the lines that `text` wraps into at a fixed content width (mm). Mirrors
- * the renderer's width-based wrapping (`_wrap_horizontal_styled`): `\n` is a
- * hard break, space-less text breaks anywhere, space-separated text wraps on
- * word boundaries (a too-long word is hard-split). Plain text is enough since
- * inline styles don't change glyph advance in our model.
+ * Width-based line wrapping over an arbitrary element sequence. The single
+ * source of truth shared by the renderer (`_wrap_horizontal_styled`, over styled
+ * chars) and the layout box estimate (`countWrappedLines`, over plain chars) so
+ * their line counts can never drift.
+ *
+ * Rules: an `isNewline` element is a hard break (dropped, starts a new line, and
+ * an empty paragraph yields an empty line); with `max_width` non-finite/≤0
+ * wrapping is disabled and each paragraph is one line; a paragraph with no space
+ * element breaks anywhere by accumulated width; a space-containing paragraph
+ * wraps on word boundaries, hard-splitting a single word wider than the line.
+ */
+export function wrapItems<T>(items: T[], max_width: number, ops: WrapOps<T>): T[][] {
+  const noWrap = !Number.isFinite(max_width) || max_width <= 0;
+  const widthOf = (xs: T[]): number => xs.reduce((w, x) => w + ops.advance(x), 0);
+
+  // Split into paragraphs on newline elements (delimiters dropped).
+  const paras: T[][] = [];
+  let cur: T[] = [];
+  for (const it of items) {
+    if (ops.isNewline(it)) {
+      paras.push(cur);
+      cur = [];
+    } else {
+      cur.push(it);
+    }
+  }
+  paras.push(cur);
+
+  const lines: T[][] = [];
+  for (const para of paras) {
+    if (para.length === 0) {
+      lines.push([]);
+      continue;
+    }
+    if (noWrap) {
+      lines.push(para);
+      continue;
+    }
+    if (!para.some(ops.isSpace)) {
+      // No spaces (CJK): break anywhere, accumulating width.
+      let line: T[] = [];
+      let w = 0;
+      for (const c of para) {
+        const a = ops.advance(c);
+        if (line.length > 0 && w + a > max_width) {
+          lines.push(line);
+          line = [];
+          w = 0;
+        }
+        line.push(c);
+        w += a;
+      }
+      if (line.length) lines.push(line);
+      continue;
+    }
+    // Word wrap for space-separated text.
+    const words: T[][] = [];
+    let word: T[] = [];
+    for (const c of para) {
+      if (ops.isSpace(c)) {
+        words.push(word);
+        word = [];
+      } else {
+        word.push(c);
+      }
+    }
+    words.push(word);
+
+    let current: T[] = [];
+    for (let w0 of words) {
+      // A single word wider than the line: hard-split it by width.
+      while (widthOf(w0) > max_width) {
+        if (current.length) {
+          lines.push(current);
+          current = [];
+        }
+        let cut = 0;
+        let w = 0;
+        for (let i = 0; i < w0.length; i++) {
+          const a = ops.advance(w0[i]);
+          if (cut > 0 && w + a > max_width) break;
+          w += a;
+          cut = i + 1;
+        }
+        lines.push(w0.slice(0, cut));
+        w0 = w0.slice(cut);
+      }
+      const candidate = current.length > 0 ? [...current, ops.space(), ...w0] : w0;
+      if (widthOf(candidate) <= max_width) {
+        current = candidate;
+      } else {
+        if (current.length) lines.push(current);
+        current = w0;
+      }
+    }
+    lines.push(current);
+  }
+  return lines;
+}
+
+/**
+ * Count the lines that `text` wraps into at a fixed content width (mm). A thin
+ * adapter over `wrapItems` (over the plain characters), so it can never disagree
+ * with the renderer's actual wrapping. Plain text is enough since inline styles
+ * don't change glyph advance in our model.
  */
 export function countWrappedLines(
   text: string,
@@ -242,65 +356,14 @@ export function countWrappedLines(
   font_size: number,
   letter_spacing = 0.0,
 ): number {
-  if (!Number.isFinite(max_width) || max_width <= 0) {
-    return Math.max(1, text.split("\n").length);
-  }
-  const cw = (ch: string) => charAdvance(ch, font_size, letter_spacing);
-  const wordW = (w: string) => measureTextWidth(w, font_size, letter_spacing);
-  let lines = 0;
-  for (const para of text.split("\n")) {
-    if (para === "") {
-      lines += 1;
-      continue;
-    }
-    if (!para.includes(" ")) {
-      let w = 0;
-      let count = 1;
-      let any = false;
-      for (const ch of para) {
-        const a = cw(ch);
-        if (any && w + a > max_width) {
-          count += 1;
-          w = 0;
-        }
-        w += a;
-        any = true;
-      }
-      lines += count;
-      continue;
-    }
-    const words = para.split(" ");
-    let cur = "";
-    let count = 0;
-    for (let word of words) {
-      while (wordW(word) > max_width) {
-        if (cur) {
-          count += 1;
-          cur = "";
-        }
-        let cut = 0;
-        let w = 0;
-        for (let i = 0; i < word.length; i++) {
-          const a = cw(word[i]);
-          if (cut > 0 && w + a > max_width) break;
-          w += a;
-          cut = i + 1;
-        }
-        count += 1;
-        word = word.slice(cut);
-      }
-      const candidate = cur ? `${cur} ${word}` : word;
-      if (wordW(candidate) <= max_width) {
-        cur = candidate;
-      } else {
-        if (cur) count += 1;
-        cur = word;
-      }
-    }
-    count += 1; // final line
-    lines += count;
-  }
-  return Math.max(1, lines);
+  const chars = [...text];
+  const lines = wrapItems(chars, max_width, {
+    advance: (ch) => charAdvance(ch, font_size, letter_spacing),
+    isNewline: (ch) => ch === "\n",
+    isSpace: (ch) => ch === " ",
+    space: () => " ",
+  });
+  return Math.max(1, lines.length);
 }
 
 /**
@@ -645,38 +708,38 @@ export class LayoutEngine {
     };
 
     for (const p of this.panels) {
-      const hsl_top = p.shared_top_skewline;
+      const hsl_top = p.top.skewline;
       if (hsl_top !== null) {
-        if (p.shared_right_skewline && p.shared_right_skewline_y) {
-          const yi = _intersect(hsl_top, p.shared_right_skewline);
+        if (p.right.skewline && p.right.skewlineY) {
+          const yi = _intersect(hsl_top, p.right.skewline);
           if (yi !== null) {
-            const [, old_bot] = p.shared_right_skewline_y;
-            p.shared_right_skewline_y = [yi, old_bot];
+            const [, old_bot] = p.right.skewlineY;
+            p.right.skewlineY = [yi, old_bot];
           }
         }
-        if (p.shared_left_skewline && p.shared_left_skewline_y) {
-          const yi = _intersect(hsl_top, p.shared_left_skewline);
+        if (p.left.skewline && p.left.skewlineY) {
+          const yi = _intersect(hsl_top, p.left.skewline);
           if (yi !== null) {
-            const [, old_bot] = p.shared_left_skewline_y;
-            p.shared_left_skewline_y = [yi, old_bot];
+            const [, old_bot] = p.left.skewlineY;
+            p.left.skewlineY = [yi, old_bot];
           }
         }
       }
 
-      const hsl_bot = p.shared_bottom_skewline;
+      const hsl_bot = p.bottom.skewline;
       if (hsl_bot !== null) {
-        if (p.shared_right_skewline && p.shared_right_skewline_y) {
-          const yi = _intersect(hsl_bot, p.shared_right_skewline);
+        if (p.right.skewline && p.right.skewlineY) {
+          const yi = _intersect(hsl_bot, p.right.skewline);
           if (yi !== null) {
-            const [old_top] = p.shared_right_skewline_y;
-            p.shared_right_skewline_y = [old_top, yi];
+            const [old_top] = p.right.skewlineY;
+            p.right.skewlineY = [old_top, yi];
           }
         }
-        if (p.shared_left_skewline && p.shared_left_skewline_y) {
-          const yi = _intersect(hsl_bot, p.shared_left_skewline);
+        if (p.left.skewline && p.left.skewlineY) {
+          const yi = _intersect(hsl_bot, p.left.skewline);
           if (yi !== null) {
-            const [old_top] = p.shared_left_skewline_y;
-            p.shared_left_skewline_y = [old_top, yi];
+            const [old_top] = p.left.skewlineY;
+            p.left.skewlineY = [old_top, yi];
           }
         }
       }
@@ -689,14 +752,14 @@ export class LayoutEngine {
     const keyOf = (base_x: number, angle: number): string => `${base_x}|${angle}`;
 
     for (const p of this.panels) {
-      if (p.shared_right_skewline) {
-        const sl = p.shared_right_skewline;
+      if (p.right.skewline) {
+        const sl = p.right.skewline;
         const k = keyOf(sl.base_x, sl.skew_angle);
         if (!right_groups.has(k)) right_groups.set(k, []);
         right_groups.get(k)!.push(p);
       }
-      if (p.shared_left_skewline) {
-        const sl = p.shared_left_skewline;
+      if (p.left.skewline) {
+        const sl = p.left.skewline;
         const k = keyOf(sl.base_x, sl.skew_angle);
         if (!left_groups.has(k)) left_groups.set(k, []);
         left_groups.get(k)!.push(p);
@@ -706,20 +769,20 @@ export class LayoutEngine {
     for (const panels of right_groups.values()) {
       if (panels.length < 2) continue;
       panels.sort((a, b) => a.rect.y - b.rect.y);
-      const canonical_mid_y = panels[0].shared_right_skewline!.mid_y;
+      const canonical_mid_y = panels[0].right.skewline!.mid_y;
       for (const p of panels.slice(1)) {
-        const sl = p.shared_right_skewline!;
-        p.shared_right_skewline = new SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle);
+        const sl = p.right.skewline!;
+        p.right.skewline = new SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle);
       }
     }
 
     for (const panels of left_groups.values()) {
       if (panels.length < 2) continue;
       panels.sort((a, b) => a.rect.y - b.rect.y);
-      const canonical_mid_y = panels[0].shared_left_skewline!.mid_y;
+      const canonical_mid_y = panels[0].left.skewline!.mid_y;
       for (const p of panels.slice(1)) {
-        const sl = p.shared_left_skewline!;
-        p.shared_left_skewline = new SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle);
+        const sl = p.left.skewline!;
+        p.left.skewline = new SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle);
       }
     }
   }
@@ -735,15 +798,25 @@ export class LayoutEngine {
     overlap_top: number,
     overlap_bottom: number,
   ): void {
-    left.adjacent_right_skew = right.attrs.skewLeft;
-    right.adjacent_left_skew = left.attrs.skewRight;
+    left.right.adjacentSkew = right.attrs.skewLeft;
+    right.left.adjacentSkew = left.attrs.skewRight;
 
     const skew_l = left.attrs.skewRight;
     const skew_r = right.attrs.skewLeft;
-    // (shared_skew is computed in Python but only effective_skew is used here.)
+    // NOTE — intentional LR/TB asymmetry (do NOT "unify" without changing output):
+    // The vertical (LR) shared gutter uses `effective_skew` below = "one side
+    // wins" (the left panel's skewRight if nonzero, else the right's skewLeft).
+    // The horizontal (TB) shared gutter (_link_tb) instead AVERAGES the two when
+    // both are set: `(skew_t + skew_b) / 2`. This mirrors the original Python
+    // implementation verbatim. `.private/SPEC.md` §5.4.3 documents the LR rule as
+    // "average when both non-zero", i.e. the spec and the code disagree — but the
+    // code (this file) is the source of truth for the golden references, so we
+    // freeze the current behavior here. Setting both `skew_right` on the left and
+    // `skew_left` on the right of one gutter is the only case where they differ;
+    // pinned by test/unit/skewAsymmetry.test.ts.
 
-    left.shared_right_x = rl.x + rl.w; // left panel's own right boundary
-    right.shared_left_x = rr.x; // right panel's own left boundary
+    left.right.x = rl.x + rl.w; // left panel's own right boundary
+    right.left.x = rr.x; // right panel's own left boundary
 
     const left_right_bw =
       left.attrs.borderRight !== null ? left.attrs.borderRight : left.attrs.border;
@@ -759,7 +832,7 @@ export class LayoutEngine {
 
     if (effective_skew !== 0) {
       if (left_draws) {
-        const prev_sl = left.shared_right_skewline;
+        const prev_sl = left.right.skewline;
         let ref_mid_y_left: number;
         if (
           prev_sl !== null &&
@@ -770,15 +843,15 @@ export class LayoutEngine {
         } else {
           ref_mid_y_left = rl.h >= rr.h ? rl.y + rl.h / 2 : rr.y + rr.h / 2;
         }
-        left.shared_right_skewline = new SkewLine(left_border_x, ref_mid_y_left, effective_skew);
-        const prev_y = left.shared_right_skewline_y;
-        left.shared_right_skewline_y = [
+        left.right.skewline = new SkewLine(left_border_x, ref_mid_y_left, effective_skew);
+        const prev_y = left.right.skewlineY;
+        left.right.skewlineY = [
           prev_y ? Math.min(prev_y[0], overlap_top) : overlap_top,
           prev_y ? Math.max(prev_y[1], overlap_bottom) : overlap_bottom,
         ];
       }
       if (right_draws) {
-        const prev_sl = right.shared_left_skewline;
+        const prev_sl = right.left.skewline;
         let ref_mid_y_right: number;
         if (
           prev_sl !== null &&
@@ -789,8 +862,8 @@ export class LayoutEngine {
         } else {
           ref_mid_y_right = rl.h >= rr.h ? rl.y + rl.h / 2 : rr.y + rr.h / 2;
         }
-        right.shared_left_skewline = new SkewLine(right_border_x, ref_mid_y_right, effective_skew);
-        const prev_y = right.shared_left_skewline_y;
+        right.left.skewline = new SkewLine(right_border_x, ref_mid_y_right, effective_skew);
+        const prev_y = right.left.skewlineY;
         let new_top = overlap_top;
         let new_bottom = overlap_bottom;
         if (prev_y) {
@@ -801,7 +874,7 @@ export class LayoutEngine {
           // the gutter so the diagonal meets the horizontal border.
           new_top = Math.min(rr.y - gap, overlap_top);
         }
-        right.shared_left_skewline_y = [new_top, new_bottom];
+        right.left.skewlineY = [new_top, new_bottom];
       }
     }
   }
@@ -813,11 +886,13 @@ export class LayoutEngine {
     rb: Rect,
     gap: number,
   ): void {
-    top.adjacent_bottom_skew = bottom.attrs.skewTop;
-    bottom.adjacent_top_skew = top.attrs.skewBottom;
+    top.bottom.adjacentSkew = bottom.attrs.skewTop;
+    bottom.top.adjacentSkew = top.attrs.skewBottom;
 
     const skew_t = top.attrs.skewBottom;
     const skew_b = bottom.attrs.skewTop;
+    // TB shared gutter AVERAGES both skews when set — deliberately different from
+    // the LR "one wins" rule in _link_lr (see the note there). Frozen behavior.
     let shared_skew: number;
     if (skew_t !== 0 && skew_b !== 0) {
       shared_skew = (skew_t + skew_b) / 2;
@@ -831,12 +906,12 @@ export class LayoutEngine {
     // For slanted gutters both borders lie on different parallel lines — both
     // must be drawn. Only suppress for flat gutters.
     if (top_covers_bottom && shared_skew === 0) {
-      bottom.draw_top = false;
+      bottom.top.draw = false;
     }
 
     const shared_y = rt.y + rt.h + gap / 2;
-    top.shared_bottom_y = shared_y;
-    bottom.shared_top_y = shared_y;
+    top.bottom.y = shared_y;
+    bottom.top.y = shared_y;
 
     const offset = shared_skew !== 0 ? (rt.w / 2) * Math.tan(radians(shared_skew)) : 0;
     const left_x = rt.x;
@@ -844,12 +919,11 @@ export class LayoutEngine {
 
     if (shared_skew !== 0) {
       const mid_x = rt.x + rt.w / 2;
-      top.shared_bottom_skewline = new SkewHLine(rt.y + rt.h, mid_x, shared_skew);
-      bottom.shared_top_skewline = new SkewHLine(rb.y, mid_x, shared_skew);
-      bottom._top_border_skewline = new SkewHLine(rt.y + rt.h, mid_x, shared_skew);
+      top.bottom.skewline = new SkewHLine(rt.y + rt.h, mid_x, shared_skew);
+      bottom.top.skewline = new SkewHLine(rb.y, mid_x, shared_skew);
     }
 
-    top.shared_bottom_endpoints = [left_x, rt.y + rt.h - offset, right_x, rt.y + rt.h + offset];
+    top.bottom.endpoints = [left_x, rt.y + rt.h - offset, right_x, rt.y + rt.h + offset];
     const bot_left_x = rb.x;
     const bot_right_x = rb.x + rb.w;
     let bot_left_y: number;
@@ -862,7 +936,7 @@ export class LayoutEngine {
       bot_left_y = rb.y;
       bot_right_y = rb.y;
     }
-    bottom.shared_top_endpoints = [bot_left_x, bot_left_y, bot_right_x, bot_right_y];
+    bottom.top.endpoints = [bot_left_x, bot_left_y, bot_right_x, bot_right_y];
   }
 
   // ── speech elements (balloon/monologue) ───────────────────────────────

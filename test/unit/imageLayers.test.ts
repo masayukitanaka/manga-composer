@@ -140,7 +140,7 @@ describe("image layers — validation errors", () => {
 
   it("rejects px/pt units for placement", () => {
     expect(() => parse(`page { panel s { images { { "a.png" width: 40px } } } }`)).toThrow(
-      /% or mm/,
+      /must use mm\/%/,
     );
   });
 

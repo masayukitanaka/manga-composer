@@ -142,6 +142,8 @@ export function renderBalloon(renderer, parent, speech) {
             parent.sub("circle", { cx: s(ox), cy: s(oy), r: s(cr), ...common });
         }
     }
+    // Balloon speech text is always black (the outline/fill are user-styled, the
+    // text is not). `_draw_text_block` resolves the font-family from attrs.
     renderer._draw_text_block(parent, r, attrs, "#000000");
 }
 // ── angle helpers ───────────────────────────────────────────────────────────

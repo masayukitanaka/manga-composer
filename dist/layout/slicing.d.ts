@@ -42,33 +42,42 @@ export declare class SkewHLine {
     skew_angle: number);
     y_at(x: number): number;
 }
+/**
+ * Shared vertical border (left or right edge of a panel) with an adjacent panel.
+ * Groups the correlated fields that used to be loose on LayoutedPanel
+ * (shared_left_x, shared_left_skewline, shared_left_skewline_y, draw_left,
+ * adjacent_left_skew) so their relationship is explicit: e.g. `skewline` present
+ * implies `skewlineY` is meaningful.
+ */
+export declare class VBorder {
+    draw: boolean;
+    adjacentSkew: number;
+    x: number | null;
+    skewline: SkewLine | null;
+    skewlineY: [number, number] | null;
+}
+/**
+ * Shared horizontal border (top or bottom edge). Mirror of VBorder for the
+ * top/bottom axis: `skewline` is a SkewHLine and the endpoint tuple replaces the
+ * Y-range span.
+ */
+export declare class HBorder {
+    draw: boolean;
+    adjacentSkew: number;
+    y: number | null;
+    skewline: SkewHLine | null;
+    endpoints: [number, number, number, number] | null;
+}
 /** A panel with computed layout (absolute coordinates). */
 export declare class LayoutedPanel {
     id: string;
     rect: Rect;
     attrs: PanelAttrs;
-    draw_left: boolean;
-    draw_right: boolean;
-    draw_top: boolean;
-    draw_bottom: boolean;
-    adjacent_left_skew: number;
-    adjacent_right_skew: number;
-    adjacent_top_skew: number;
-    adjacent_bottom_skew: number;
-    shared_left_x: number | null;
-    shared_right_x: number | null;
-    shared_top_y: number | null;
-    shared_bottom_y: number | null;
-    shared_left_skewline: SkewLine | null;
-    shared_right_skewline: SkewLine | null;
-    shared_left_skewline_y: [number, number] | null;
-    shared_right_skewline_y: [number, number] | null;
-    shared_top_skewline: SkewHLine | null;
-    shared_bottom_skewline: SkewHLine | null;
-    shared_top_endpoints: [number, number, number, number] | null;
-    shared_bottom_endpoints: [number, number, number, number] | null;
+    left: VBorder;
+    right: VBorder;
+    top: HBorder;
+    bottom: HBorder;
     speeches: SpeechNode[];
-    _top_border_skewline?: SkewHLine;
     constructor(id: string, rect: Rect, attrs: PanelAttrs, speeches?: SpeechNode[]);
 }
 /** A balloon/monologue element with computed layout. */
@@ -99,12 +108,31 @@ export declare function isFullWidthChar(ch: string): boolean;
 export declare function charAdvance(ch: string, font_size: number, letter_spacing?: number): number;
 /** Total advance width (mm) of a string. */
 export declare function measureTextWidth(text: string, font_size: number, letter_spacing?: number): number;
+/** Element predicates + advance for generic width-based wrapping. */
+export interface WrapOps<T> {
+    advance: (t: T) => number;
+    isNewline: (t: T) => boolean;
+    isSpace: (t: T) => boolean;
+    space: () => T;
+}
 /**
- * Count the lines that `text` wraps into at a fixed content width (mm). Mirrors
- * the renderer's width-based wrapping (`_wrap_horizontal_styled`): `\n` is a
- * hard break, space-less text breaks anywhere, space-separated text wraps on
- * word boundaries (a too-long word is hard-split). Plain text is enough since
- * inline styles don't change glyph advance in our model.
+ * Width-based line wrapping over an arbitrary element sequence. The single
+ * source of truth shared by the renderer (`_wrap_horizontal_styled`, over styled
+ * chars) and the layout box estimate (`countWrappedLines`, over plain chars) so
+ * their line counts can never drift.
+ *
+ * Rules: an `isNewline` element is a hard break (dropped, starts a new line, and
+ * an empty paragraph yields an empty line); with `max_width` non-finite/≤0
+ * wrapping is disabled and each paragraph is one line; a paragraph with no space
+ * element breaks anywhere by accumulated width; a space-containing paragraph
+ * wraps on word boundaries, hard-splitting a single word wider than the line.
+ */
+export declare function wrapItems<T>(items: T[], max_width: number, ops: WrapOps<T>): T[][];
+/**
+ * Count the lines that `text` wraps into at a fixed content width (mm). A thin
+ * adapter over `wrapItems` (over the plain characters), so it can never disagree
+ * with the renderer's actual wrapping. Plain text is enough since inline styles
+ * don't change glyph advance in our model.
  */
 export declare function countWrappedLines(text: string, max_width: number, font_size: number, letter_spacing?: number): number;
 /**

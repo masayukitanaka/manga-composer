@@ -39,6 +39,7 @@ import {
   type SpeechNode,
   type LayoutNode,
   type Length,
+  type Unit,
   type ImageLayer,
   type Align,
   type Direction,
@@ -125,6 +126,65 @@ function toFloat(text: string): number {
 /** Python int(float(value)) — accept "2.0", truncate toward zero. */
 function toInt(text: string): number {
   return Math.trunc(toFloat(text));
+}
+
+// ── unified length normalization ────────────────────────────────────────────
+//
+// Three DSL contexts turn a value into a {value, unit} Length: row/col sizes,
+// image-layer geometry, and line_height. They share the same
+// normalize → validate-unit → validate-positive shape but differ in two
+// deliberate ways, captured by LengthPolicy:
+//   - `bareNumber`: what a unit-less number means ("mm" for geometry,
+//     "multiplier" for line_height, "reject" for row/col which require a unit).
+//   - `allowedUnits`: which units survive validation (row/col accept px/pt;
+//     the others only mm/%).
+// `percentDivisor` handles line_height's `140%` → 1.4 folding (divisor 100);
+// the others keep the percent number as-is (divisor 1).
+interface LengthPolicy {
+  /** Human field name for error messages (e.g. "line_height", "image layer x"). */
+  field: string;
+  /** Meaning of a unit-less number. */
+  bareNumber: "mm" | "multiplier" | "reject";
+  /** Units that pass validation. */
+  allowedUnits: readonly Unit[];
+  /** Divide a `%` number by this before storing (100 for line_height, else 1). */
+  percentDivisor?: number;
+  /** Require value > 0. */
+  positive?: boolean;
+}
+
+/**
+ * Normalize an already-parsed RawValue into a validated Length per `policy`.
+ * A `NUMBER UNIT` RawValue keeps its unit; a scalar is a bare number or a `%`
+ * literal. Single source of truth for unit-allow-listing and positivity checks.
+ */
+function normalizeLength(val: RawValue, policy: LengthPolicy): Length {
+  const divisor = policy.percentDivisor ?? 1;
+  let len: Length;
+  if (val.kind === "length") {
+    // NUMBER UNIT — the lexer already attached the unit (mm/px/pt).
+    len = val.length;
+  } else {
+    const text = val.text;
+    if (text.endsWith("%")) {
+      len = { value: toFloat(text.replace(/%$/, "")) / divisor, unit: "%" };
+    } else if (policy.bareNumber === "mm") {
+      len = { value: toFloat(text), unit: "mm" };
+    } else if (policy.bareNumber === "multiplier") {
+      len = { value: toFloat(text), unit: "%" };
+    } else {
+      throw new ParseError(`${policy.field} requires a unit (got ${JSON.stringify(text)})`);
+    }
+  }
+  if (!policy.allowedUnits.includes(len.unit)) {
+    throw new ParseError(
+      `${policy.field} must use ${policy.allowedUnits.join("/")} (got ${JSON.stringify(len.unit)})`,
+    );
+  }
+  if (policy.positive && len.value <= 0) {
+    throw new ParseError(`${policy.field} must be positive (got ${len.value}${len.unit})`);
+  }
+  return len;
 }
 
 /** Coerce a DSL `true`/`false` identifier to a boolean. */
@@ -229,19 +289,19 @@ class Parser {
 
   /** length_value: NUMBER UNIT | PERCENTAGE (used by row height / col width). */
   private parseLengthValue(field = "size"): Length {
+    // Read the token(s) into a RawValue, then hand off to the shared
+    // normalizer. The grammar here requires an explicit unit (no bare number)
+    // and accepts mm/px/pt/%, and the size must be positive.
     const t = this.peek();
-    let len: Length;
+    let val: RawValue;
     if (t.type === "PERCENTAGE") {
       this.next();
-      len = { value: toFloat(t.value.replace(/%$/, "")), unit: "%" };
+      val = { kind: "scalar", text: t.value };
     } else if (t.type === "NUMBER") {
       this.next();
-      // grammar requires a UNIT here, but be lenient like value: allow a bare
-      // number to mean mm is NOT valid in grammar (length_value: NUMBER UNIT),
-      // so require the unit.
       if (this.atKeyword("mm") || this.atKeyword("px") || this.atKeyword("pt")) {
         const unit = this.next().value as "mm" | "px" | "pt";
-        len = { value: toFloat(t.value), unit };
+        val = { kind: "length", length: { value: toFloat(t.value), unit } };
       } else {
         throw new ParseError(
           `Expected a unit (mm/px/pt) after ${t.value} at line ${t.line}, column ${t.col}`,
@@ -252,14 +312,12 @@ class Parser {
         `Expected a length value but got ${t.type} ${JSON.stringify(t.value)} at line ${t.line}, column ${t.col}`,
       );
     }
-    // A row height / col width must be positive; a negative or zero size is a
-    // mistake that layout would otherwise silently accept and mis-render.
-    if (len.value <= 0) {
-      throw new ParseError(
-        `${field} must be positive (got ${len.value}${len.unit}) at line ${t.line}, column ${t.col}`,
-      );
-    }
-    return len;
+    return normalizeLength(val, {
+      field,
+      bareNumber: "reject",
+      allowedUnits: ["mm", "px", "pt", "%"],
+      positive: true,
+    });
   }
 
   // ── page ──────────────────────────────────────────────────────────────
@@ -753,27 +811,13 @@ class Parser {
    * treated as mm for convenience. `positive` requires value > 0.
    */
   private imageLayerLength(val: RawValue, field: string, positive = false): Length {
-    let len: Length;
-    if (val.kind === "length") {
-      len = val.length;
-    } else {
-      // scalar: either PERCENTAGE ("40%") or a bare NUMBER (→ mm).
-      const text = val.text;
-      if (text.endsWith("%")) {
-        len = { value: toFloat(text.replace(/%$/, "")), unit: "%" };
-      } else {
-        len = { value: toFloat(text), unit: "mm" };
-      }
-    }
-    if (len.unit !== "%" && len.unit !== "mm") {
-      throw new ParseError(
-        `image layer ${field} must use % or mm (got ${JSON.stringify(len.unit)})`,
-      );
-    }
-    if (positive && len.value <= 0) {
-      throw new ParseError(`image layer ${field} must be positive (got ${len.value})`);
-    }
-    return len;
+    // A bare number is mm; `40%` is a percentage. mm/% only.
+    return normalizeLength(val, {
+      field: `image layer ${field}`,
+      bareNumber: "mm",
+      allowedUnits: ["mm", "%"],
+      positive,
+    });
   }
 
   /**
@@ -782,25 +826,15 @@ class Parser {
    * `mm` value is an absolute line advance. px/pt are rejected. Must be > 0.
    */
   private lineHeightLength(val: RawValue): Length {
-    let len: Length;
-    if (val.kind === "length") {
-      len = val.length; // NUMBER UNIT — only mm is meaningful here
-    } else {
-      const text = val.text;
-      if (text.endsWith("%")) {
-        len = { value: toFloat(text.replace(/%$/, "")) / 100, unit: "%" };
-      } else {
-        // bare number = multiplier
-        len = { value: toFloat(text), unit: "%" };
-      }
-    }
-    if (len.unit !== "%" && len.unit !== "mm") {
-      throw new ParseError(`line_height must be a number, % or mm (got ${JSON.stringify(len.unit)})`);
-    }
-    if (len.value <= 0) {
-      throw new ParseError(`line_height must be positive (got ${len.value})`);
-    }
-    return len;
+    // A bare number is a font-size multiplier (`1.4`), `140%` folds to the same
+    // 1.4, and `mm` is an absolute advance. px/pt are rejected. Must be > 0.
+    return normalizeLength(val, {
+      field: "line_height",
+      bareNumber: "multiplier",
+      allowedUnits: ["mm", "%"],
+      percentDivisor: 100,
+      positive: true,
+    });
   }
 
   /**

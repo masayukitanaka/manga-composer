@@ -75,10 +75,11 @@ export declare function _style_chars(text: string, base: {
     bold: boolean;
 }): StyledChar[];
 /**
- * Wrap styled chars into lines. Mirrors `_wrap_horizontal_text`: `\n` is a hard
- * break; a paragraph with no spaces (CJK) wraps by char count; a space-separated
- * paragraph wraps on word boundaries. Returns a list of lines (each a
- * StyledChar[]).
+ * Wrap styled chars into lines at a fixed content width. A thin adapter over the
+ * shared `wrapItems` primitive (see slicing.ts) so the drawn line breaks always
+ * match the box-size estimate's line count. `\n` is a hard break; a space-less
+ * paragraph (CJK) breaks anywhere; a space-separated paragraph wraps on word
+ * boundaries. Returns a list of lines (each a StyledChar[]).
  */
 export declare function _wrap_horizontal_styled(chars: StyledChar[], max_width: number, font_size: number, letter_spacing?: number): StyledChar[][];
 /** Group adjacent same-style chars in a line into runs for <tspan> output. */
