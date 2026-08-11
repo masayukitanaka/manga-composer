@@ -591,9 +591,18 @@ export class SVGRenderer {
             }
         }
         // Top border.
+        // A skewed side that lost its shared `skewline` to an `offset_*` wipe (see
+        // the offset handling in _render_panel) still slants via `attrs.skewLeft/
+        // Right`, so treat the panel's own skew as a skewed side here too. Without
+        // this, an `offset_left`+`skew_left` panel drew every edge but its top,
+        // leaving the frame open at the top (adjacent panels looked "disappeared").
+        const has_skewed_side = panel.left.skewline !== null ||
+            panel.right.skewline !== null ||
+            attrs.skewLeft !== 0 ||
+            attrs.skewRight !== 0;
         const needs_top = panel.top.draw ||
             (border_top_width > 0 &&
-                (panel.left.skewline !== null || panel.right.skewline !== null) &&
+                has_skewed_side &&
                 panel.top.endpoints !== null &&
                 panel.top.skewline === null);
         if (needs_top && border_top_width > 0) {

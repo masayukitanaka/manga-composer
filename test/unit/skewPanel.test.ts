@@ -324,4 +324,23 @@ describe("skewed-panel rendering — corner cases (frozen output)", () => {
       }
     `);
   });
+
+  // Regression: a panel with BOTH skew_left and offset_left. The offset wipes
+  // the shared `left.skewline` (the edge moved off the gutter), but the panel
+  // still slants via attrs.skewLeft. The top-border test used to look only at
+  // `left/right.skewline`, so the top edge was dropped and the frame stayed
+  // open at the top — adjacent panels looked like they had "disappeared".
+  // (examples/skew_sample1.manga, panel_2.) The top border must be present.
+  it("skew_left + offset_left still draws the top border", () => {
+    const { lines } = shapes(`page { padding:5 border:1 gutter:6 direction: rtl
+      col {
+        row height: 40% { panel top {} }
+        row { col { panel R { skew_left: 8 offset_left: 3 } } col { panel L {} } }
+      } }`);
+    // The skewed right panel R sits below the shared gutter at y=123.4; its top
+    // edge runs horizontally from the top of its slanted left side to its right
+    // side. Before the fix this line was missing entirely.
+    const topR = lines.find((l) => l.startsWith("93.1524076345884,123.4 205,123.4"));
+    expect(topR, `R panel top border missing; lines=\n${lines.join("\n")}`).toBeTruthy();
+  });
 });
