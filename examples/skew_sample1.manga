@@ -1,0 +1,168 @@
+page {
+  size: B5
+  direction: rtl
+  gutter: 6
+  padding_top: 18.5
+  padding_bottom: 18.5
+  padding_left: 16
+  padding_right: 16
+  border: 0.3
+
+  col {
+    row height: 32.4% {
+      row {
+        panel p1 {
+          monologue {
+            text: "てすと"
+            text_direction: vertical
+            font_size: 3
+            x: 137.4
+            y: 21.5
+            width: 25.6
+            height: 43.5
+            margin: 0
+            border: 0.25
+            align: center
+          }
+          balloon {
+            text: "あ"
+            text_direction: vertical
+            font_size: 3
+            x: 115.8
+            y: 24.4
+            width: 18.6
+            height: 36.1
+            margin: 0
+            border: 0.25
+            align: center
+            shape: rounded_box
+          }
+          balloon {
+            text: "aa"
+            text_direction: vertical
+            font_size: 3
+            x: 23.7
+            y: 22.8
+            width: 18.6
+            height: 36.1
+            margin: 0
+            border: 0.25
+            align: center
+            shape: rounded_box
+            tail_angle: 175
+            tail_length: 15
+          }
+        }
+      }
+    }
+    row height: 67.6% {
+      col {
+        row height: 39.8% {
+          row {
+            col width: 53.2% {
+              panel panel_2 {
+                skew_left: 6
+                offset_left: 3.2
+                monologue {
+                  text: "私の"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 139.9
+                  y: 96
+                  width: 23.1
+                  height: 50.8
+                  margin: 0
+                  border: 0.25
+                  align: center
+                }
+                monologue {
+                  text: "私の"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 140.3
+                  y: 159.1
+                  width: 23.3
+                  height: 63.8
+                  margin: 0
+                  border: 0.25
+                  align: center
+                }
+              }
+            }
+            col width: 46.8% {
+              panel panel_5 {
+                monologue {
+                  text: "さらに"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 68.7
+                  y: 95.8
+                  width: 9.7
+                  height: 17.4
+                  margin: 0
+                  align: center
+                }
+              }
+            }
+          }
+        }
+        row height: 60.2% {
+          row {
+            col width: 57% {
+              panel panel_3 {
+                offset_left: 1.1
+                balloon {
+                  text: "んだ"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 123.4
+                  y: 193.1
+                  width: 12.4
+                  height: 27.4
+                  margin: 0
+                  border: 0.25
+                  align: center
+                  shape: rounded_box
+                  tail_angle: 186.8
+                  tail_length: 6.9
+                }
+                balloon {
+                  text: "ああ"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 92
+                  y: 192.6
+                  width: 15.3
+                  height: 27.4
+                  margin: 0
+                  border: 0.25
+                  align: center
+                  shape: rounded_box
+                  tail_angle: 186.8
+                  tail_length: 6.9
+                }
+              }
+            }
+            col width: 43% {
+              panel panel_6 {
+                offset_right: 1.6
+                monologue {
+                  text: "こうした出来事から"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 59
+                  y: 157
+                  width: 17.8
+                  height: 42
+                  margin: 0
+                  border: 0.25
+                  align: center
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
