@@ -72,18 +72,25 @@ describe("skewed-panel rendering — corner cases (frozen output)", () => {
       `);
   });
 
+  // These "isolated own skew" cases (no shared skewline, no neighbour) must draw
+  // a clean 4-point parallelogram: the slanted top/bottom edge, verticals that
+  // reach its slanted corners, and no clip kink. Earlier these snapshots froze a
+  // BUGGY output — a flat bottom border and a 5/6-point clipped polygon — because
+  // the clip bounds and border/vertical-extent logic keyed only off a shared
+  // `top/bottom.skewline` and ignored the panel's own `attrs.skewTop/Bottom`. The
+  // same gap distorted `skew_bottom` + `offset_bottom` (examples/skew_bottom.manga).
   it("isolated own skew_top", () => {
     expect(shapes(`page { padding:5 border:1 row { panel a { skew_top: 10 } } }`))
       .toMatchInlineSnapshot(`
         {
           "lines": [
-            "5,5 5,292 w=1",
-            "205,5 205,292 w=1",
+            "5,-12.632698070846498 5,292 w=1",
+            "205,22.632698070846498 205,292 w=1",
             "5,-12.632698070846498 205,22.632698070846498 w=1",
             "5,292 205,292 w=1",
           ],
           "polys": [
-            "5,5 105,5 205,22.632698070846498 205,292 5,292",
+            "5,-12.632698070846498 205,22.632698070846498 205,292 5,292",
           ],
         }
       `);
@@ -94,13 +101,13 @@ describe("skewed-panel rendering — corner cases (frozen output)", () => {
       .toMatchInlineSnapshot(`
         {
           "lines": [
-            "5,5 5,292 w=1",
-            "205,5 205,292 w=1",
+            "5,5 5,274.3673019291535 w=1",
+            "205,5 205,309.6326980708465 w=1",
             "5,5 205,5 w=1",
-            "5,292 205,292 w=1",
+            "5,274.3673019291535 205,309.6326980708465 w=1",
           ],
           "polys": [
-            "5,5 205,5 205,292 105,292 5,274.3673019291535",
+            "5,5 205,5 205,309.6326980708465 5,274.3673019291535",
           ],
         }
       `);
@@ -120,7 +127,7 @@ describe("skewed-panel rendering — corner cases (frozen output)", () => {
           "25.167609779793175,283.2511336474076 184.83239022020683,300.7488663525924 w=1",
         ],
         "polys": [
-          "-13.93803679990016,5.000000000000057 105,5 225.16760977979317,13.748866352592401 186.06196320009985,291.99999999999994 105,292 25.167609779793175,283.2511336474076",
+          "-15.167609779793175,-3.748866352592401 225.16760977979317,13.748866352592401 184.83239022020683,300.7488663525924 25.167609779793175,283.2511336474076",
         ],
       }
     `);
@@ -342,5 +349,35 @@ describe("skewed-panel rendering — corner cases (frozen output)", () => {
     // side. Before the fix this line was missing entirely.
     const topR = lines.find((l) => l.startsWith("93.1524076345884,123.4 205,123.4"));
     expect(topR, `R panel top border missing; lines=\n${lines.join("\n")}`).toBeTruthy();
+  });
+
+  // Regression (mirror of the above on the bottom edge): a panel with BOTH
+  // skew_bottom and offset_bottom. offset_bottom wipes the shared bottom.skewline
+  // / endpoints, but the panel still slants via attrs.skewBottom. The clip bounds
+  // and the bottom-border / vertical-extent logic used to key only off the shared
+  // skewline, so the bottom border rendered FLAT while the fill stayed slanted —
+  // a stray diagonal + kinked frame. (examples/skew_bottom.manga.) The top
+  // panel's bottom border must be slanted and its verticals must reach the
+  // slanted corners.
+  it("skew_bottom + offset_bottom draws a slanted (not flat) bottom border", () => {
+    const { lines } = shapes(`page { padding:5 border:1 gutter:6
+      col {
+        row { panel top { skew_bottom: 8 offset_bottom: 3 } }
+        row { panel bot {} }
+      } }`);
+    const parse = (l: string): [number, number, number, number] => {
+      const m = /^([\d.-]+),([\d.-]+) ([\d.-]+),([\d.-]+)/.exec(l)!;
+      return [+m[1], +m[2], +m[3], +m[4]];
+    };
+    // The top panel's bottom edge spans the full width (x: 5 → 205). Excluding
+    // the flat top border (y=5) and the page-bottom (y=292), it must slant: its
+    // two endpoint Ys differ. A flat y1===y2 line here is the bug.
+    const topBottom = lines
+      .map(parse)
+      .filter(([x1, , x2]) => x1 === 5 && x2 === 205)
+      .find(([, y1]) => y1 > 5 && y1 < 292);
+    expect(topBottom, `no interior full-width edge; lines=\n${lines.join("\n")}`).toBeTruthy();
+    const [, y1, , y2] = topBottom!;
+    expect(Math.abs(y2 - y1)).toBeGreaterThan(1); // slanted, not flat
   });
 });

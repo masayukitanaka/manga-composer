@@ -44,6 +44,13 @@ export declare class SVGRenderer {
     private _render_description;
     private _render_rect_panel;
     private _render_skewed_panel;
+    /**
+     * The skewed panel's outline as clipped polygon points — the exact shape the
+     * fill paints and the borders trace. Shared so an image clip can match the
+     * frame instead of falling back to an axis-aligned rect (which cut images on a
+     * flat line across a slanted top/bottom edge).
+     */
+    private _skew_panel_polygon;
     /** Fill the clipped panel trapezoid with the panel background. */
     private _skew_fill;
     /** Register the per-panel clipPath and attach it to the border group. */

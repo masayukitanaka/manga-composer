@@ -219,8 +219,15 @@ function _skew_corners(panel: LayoutedPanel, r: Rect): SkewCorners {
   }
 
   // ── Clip Y bounds ────────────────────────────────────────────────────
-  const clip_y_min = panel.top.skewline ? Math.min(tl_y, tr_y) : r.y;
-  const clip_y_max = panel.bottom.skewline ? Math.max(bl_y, br_y) : r.y + r.h;
+  // A slanted top/bottom edge tilts one corner past the flat rect bound, so the
+  // clip must reach the outermost corner. This holds whether the slant comes
+  // from a shared skewline OR from the panel's own skewTop/skewBottom — the
+  // latter matters when an `offset_*` wiped the shared skewline but left the
+  // own-skew corner offsets in place (else the fill gets clipped to a kink).
+  const top_slanted = panel.top.skewline !== null || attrs.skewTop !== 0;
+  const bottom_slanted = panel.bottom.skewline !== null || attrs.skewBottom !== 0;
+  const clip_y_min = top_slanted ? Math.min(tl_y, tr_y) : r.y;
+  const clip_y_max = bottom_slanted ? Math.max(bl_y, br_y) : r.y + r.h;
 
   // ── Vertical border Y extents ────────────────────────────────────────
   let left_top_y: number;
@@ -233,6 +240,11 @@ function _skew_corners(panel: LayoutedPanel, r: Rect): SkewCorners {
     if (panel.right.skewline) right_top_y = r.y;
     else if (panel.top.skewline) right_top_y = _ty2;
     else right_top_y = r.y;
+  } else if (attrs.skewTop !== 0 && !panel.top.skewline) {
+    // Own skew_top (no shared skewline): the vertical borders must reach the
+    // slanted top corners, mirroring the skew_bottom handling below.
+    left_top_y = tl_y;
+    right_top_y = tr_y;
   } else {
     left_top_y = right_top_y = r.y;
   }
@@ -248,6 +260,12 @@ function _skew_corners(panel: LayoutedPanel, r: Rect): SkewCorners {
     else if (panel.bottom.skewline)
       right_bottom_y = panel.bottom.skewline.y_at(r.x + r.w);
     else right_bottom_y = r.y + r.h;
+  } else if (attrs.skewBottom !== 0 && !panel.bottom.skewline) {
+    // Own skew_bottom whose shared skewline was wiped by offset_bottom: the
+    // vertical borders must reach the slanted bottom corners, not the flat
+    // r.y + r.h, or a stub of vertical border juts past the slant / leaves a gap.
+    left_bottom_y = bl_y;
+    right_bottom_y = br_y;
   } else {
     left_bottom_y = right_bottom_y = r.y + r.h;
   }
@@ -461,8 +479,11 @@ export class SVGRenderer {
       panel.top.adjacentSkew !== 0 ||
       panel.bottom.adjacentSkew !== 0;
 
-    if (has_skew) {
-      this._render_skewed_panel(g, gb, border_parent, panel, r, defs);
+    // Corners are computed once here (pure fn) so a skewed panel's image clip
+    // can reuse the exact frame polygon, not just the fill/borders.
+    const corners = has_skew ? _skew_corners(panel, r) : null;
+    if (corners) {
+      this._render_skewed_panel(g, gb, border_parent, panel, r, defs, corners);
     } else {
       this._render_rect_panel(g, gb, panel, r);
     }
@@ -471,7 +492,8 @@ export class SVGRenderer {
     // the panel actually draws, so layers must be placed and clipped against
     // it. Clipping to the raw rect cut a band off every image on an
     // `offset_*` panel.
-    if (attrs.imageLayers.length > 0) this._render_image_layers(g, panel, r, defs);
+    if (attrs.imageLayers.length > 0)
+      this._render_image_layers(g, panel, r, defs, corners);
     if (attrs.text) this._render_text(g, panel);
 
     if (attrs.label !== null) {
@@ -603,21 +625,26 @@ export class SVGRenderer {
     panel: LayoutedPanel,
     r: Rect,
     defs: XmlElement | null,
+    c: SkewCorners,
   ): void {
-    const c = _skew_corners(panel, r);
     this._skew_fill(g, panel, r, c);
     this._skew_clip(gb, panel, r, c, defs);
     this._skew_borders(border_parent, panel, r, c);
   }
 
-  /** Fill the clipped panel trapezoid with the panel background. */
-  private _skew_fill(g: XmlElement, panel: LayoutedPanel, r: Rect, c: SkewCorners): void {
+  /**
+   * The skewed panel's outline as clipped polygon points — the exact shape the
+   * fill paints and the borders trace. Shared so an image clip can match the
+   * frame instead of falling back to an axis-aligned rect (which cut images on a
+   * flat line across a slanted top/bottom edge).
+   */
+  private _skew_panel_polygon(panel: LayoutedPanel, r: Rect, c: SkewCorners): Point[] {
     const attrs = panel.attrs;
     const clip_x_min =
       panel.left.skewline || attrs.skewLeft !== 0 ? Math.min(c.tl_x, c.bl_x) : r.x;
     const clip_x_max =
       panel.right.skewline || attrs.skewRight !== 0 ? Math.max(c.tr_x, c.br_x) : r.x + r.w;
-    const poly_pts = _panel_fill_polygon(
+    return _panel_fill_polygon(
       c.tl_x,
       c.tl_y,
       c.tr_x,
@@ -631,9 +658,14 @@ export class SVGRenderer {
       clip_x_max,
       c.clip_y_max,
     );
+  }
+
+  /** Fill the clipped panel trapezoid with the panel background. */
+  private _skew_fill(g: XmlElement, panel: LayoutedPanel, r: Rect, c: SkewCorners): void {
+    const poly_pts = this._skew_panel_polygon(panel, r, c);
     if (poly_pts.length > 0) {
       const points_str = poly_pts.map(([x, y]) => `${x},${y}`).join(" ");
-      g.sub("polygon", { points: points_str, fill: attrs.background, stroke: "none" });
+      g.sub("polygon", { points: points_str, fill: panel.attrs.background, stroke: "none" });
     }
   }
 
@@ -815,6 +847,10 @@ export class SVGRenderer {
         if (p) [bx1, by1] = p;
       } else if (attrs.skewLeft !== 0 && !panel.bottom.skewline) {
         [bx1, by1] = [c.bl_x, c.bl_y];
+      } else if (attrs.skewBottom !== 0 && !panel.bottom.skewline) {
+        // Own skew_bottom whose shared skewline was wiped by offset_bottom:
+        // keep the slanted corner instead of flattening to r.y + r.h.
+        [bx1, by1] = [c.bl_x, c.bl_y];
       } else {
         if (panel.bottom.endpoints) {
           // by1 already correct
@@ -836,6 +872,10 @@ export class SVGRenderer {
         const p = _skewline_intersection(panel.bottom.skewline, panel.right.skewline);
         if (p) [bx2, by2] = p;
       } else if (attrs.skewRight !== 0 && !panel.bottom.skewline) {
+        [bx2, by2] = [c.br_x, c.br_y];
+      } else if (attrs.skewBottom !== 0 && !panel.bottom.skewline) {
+        // Own skew_bottom whose shared skewline was wiped by offset_bottom:
+        // keep the slanted corner instead of flattening to r.y + r.h.
         [bx2, by2] = [c.br_x, c.br_y];
       } else {
         if (panel.bottom.endpoints) {
@@ -871,18 +911,26 @@ export class SVGRenderer {
     panel: LayoutedPanel,
     rect: Rect,
     defs: XmlElement | null,
+    corners: SkewCorners | null,
   ): void {
-    // A single clipPath (= the panel's DRAWN rect, offsets included) shared by
+    // A single clipPath (= the panel's DRAWN shape, offsets included) shared by
     // every clipped layer of this panel; created lazily so panels with no
-    // clipped layer add nothing.
+    // clipped layer add nothing. For a skewed panel the clip is the frame
+    // polygon (so images trim along the slanted edge, matching the border), not
+    // an axis-aligned rect that would cut them on a flat line.
     let clip_ref: string | null = null;
     const ensureClip = (): string | null => {
       if (defs === null) return null;
       if (clip_ref === null) {
         const clip_id = `clip_imgs_${panel.id}`;
         const cp = defs.sub("clipPath", { id: clip_id });
-        const r = rect;
-        cp.sub("rect", { x: s(r.x), y: s(r.y), width: s(r.w), height: s(r.h) });
+        const poly = corners ? this._skew_panel_polygon(panel, rect, corners) : null;
+        if (poly && poly.length > 0) {
+          cp.sub("polygon", { points: poly.map(([x, y]) => `${x},${y}`).join(" ") });
+        } else {
+          const r = rect;
+          cp.sub("rect", { x: s(r.x), y: s(r.y), width: s(r.w), height: s(r.h) });
+        }
         clip_ref = `url(#${clip_id})`;
       }
       return clip_ref;

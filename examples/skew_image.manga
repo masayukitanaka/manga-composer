@@ -1,0 +1,24 @@
+page {
+  size: 216x216mm
+  direction: rtl
+  gutter: 3
+  padding_top: 10
+  padding_bottom: 10
+  padding_left: 10
+  padding_right: 10
+  border: 0.3
+
+  col {
+    row {
+      panel p1 {
+        skew_bottom: 8
+        images {
+          { path: "assets/hometown.jpg" anchor_pos: top_left x: -2.4mm y: -1.3mm width: 102.96% height: 143.32% }
+        }
+      }
+    }
+    row {
+      panel panel_2
+    }
+  }
+}

@@ -367,6 +367,39 @@ describe("image layers — clip", () => {
     const defs = [...svg.matchAll(/<clipPath id="clip_imgs_s">/g)];
     expect(defs).toHaveLength(1);
   });
+
+  // A flat panel's image clip stays an axis-aligned <rect>.
+  it("uses a rect image clip on a non-skewed panel", () => {
+    const { svg } = renderPanels(`page {
+      panel s { images { { "a.png" width: 50% } } }
+    }`);
+    const cp = svg.match(/<clipPath id="clip_imgs_s">(.*?)<\/clipPath>/)![1];
+    expect(cp).toMatch(/<rect\b/);
+    expect(cp).not.toMatch(/<polygon\b/);
+  });
+
+  // Regression: a skewed panel must clip its images to the FRAME polygon, so the
+  // image trims along the slanted edge — not a flat rect that cut it on a
+  // horizontal line across a slanted top/bottom. (examples/skew_image.manga.)
+  // The image clip polygon must equal the panel's fill polygon exactly.
+  it("clips images to the skewed frame polygon (not a flat rect)", () => {
+    const { svg } = renderPanels(`page { border:1
+      col {
+        row { panel s { skew_bottom: 8 images { { "a.png" width: 100% height: 120% } } } }
+        row { panel b {} }
+      } }`);
+    const clip = svg.match(/<clipPath id="clip_imgs_s"><polygon points="([^"]*)"/);
+    expect(clip, "image clip should be a polygon on a skewed panel").toBeTruthy();
+    // The clip polygon matches the panel's own fill polygon (same 4 corners).
+    const fill = [...svg.matchAll(/<polygon points="([^"]*)" fill="[^"]*" stroke="none"/g)].map(
+      (m) => m[1],
+    );
+    expect(fill).toContain(clip![1]);
+    // And the slanted bottom edge means the two bottom corners have different Ys.
+    const pts = clip![1].split(" ").map((p) => p.split(",").map(Number));
+    const ys = pts.map(([, y]) => y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(1);
+  });
 });
 
 describe("image layers — flip_h (horizontal mirror)", () => {
