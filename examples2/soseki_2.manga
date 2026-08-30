@@ -1,0 +1,186 @@
+page {
+  size: B5
+  direction: rtl
+  gutter: 6
+  padding_top: 18.5
+  padding_bottom: 18.5
+  padding_left: 16
+  padding_right: 16
+  border: 0.3
+
+  col {
+    row height: 29.7% {
+      row {
+        panel p1 {
+          images {
+            { path: "assets/soseki_2_p1.png" }
+          }
+          monologue {
+            text: "その後私はすぐ四谷の商売人の家に\n里子に出されました"
+            text_direction: vertical
+            font_size: 3
+            x: 143.5
+            y: 21.5
+            width: 19.5
+            height: 53.9
+            margin: 0
+            background: "#ffffff"
+            border: 0.25
+            align: center
+          }
+          monologue {
+            text: "今にして思えば養子に出される予定の私に愛着がわかないよう父なりの配慮だったのかもしれません"
+            text_direction: vertical
+            font_size: 3
+            x: 19.6
+            y: 23.2
+            width: 19.7
+            height: 54.4
+            margin: 0
+            background: "#ffffff"
+            border: 0.25
+            align: center
+          }
+          monologue {
+            text: "当時は裕福な家庭が養育費と引き換えに子どもの世話を依頼することは普通でした"
+            text_direction: vertical
+            font_size: 3
+            x: 44.9
+            y: 23.4
+            width: 20.2
+            height: 54.7
+            margin: 0
+            background: "#ffffff"
+            border: 0.25
+            align: center
+          }
+        }
+      }
+    }
+    row height: 70.3% {
+      col {
+        row height: 39.7% {
+          row {
+            col width: 63.2% {
+              row {
+                panel panel_2 {
+                  offset_left: -1
+                  images {
+                    { path: "assets/soseki_2_p2.png" anchor_pos: top_left x: 21.22% y: 10.62% width: 56.39% height: 92.15% }
+                  }
+                  monologue {
+                    text: "ある日姉のふさが道を歩いていると"
+                    text_direction: vertical
+                    font_size: 3
+                    x: 152.6
+                    y: 91.1
+                    width: 10.4
+                    height: 52.9
+                    margin: 0
+                    align: center
+                  }
+                  balloon {
+                    text: "金之助が引き取られたお店ね"
+                    text_direction: vertical
+                    font_size: 3
+                    x: 83.4
+                    y: 96.1
+                    width: 19.8
+                    height: 37.8
+                    margin: 0
+                    border: 0.2
+                    align: center
+                    jitter: 0.3
+                    tail_angle: 86.7
+                    tail_length: 1.4
+                  }
+                }
+              }
+            }
+            col width: 36.8% {
+              panel panel_6 {
+                offset_right: 4
+                images {
+                  { path: "assets/soseki_2_p3.png" anchor_pos: top_left x: 30.45% y: 0.46% width: 76.53% height: 100% flip_h: true }
+                }
+                balloon {
+                  text: "様子でも見ていこうかしら"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 16.1
+                  y: 109.9
+                  width: 17.4
+                  height: 31.7
+                  margin: 0
+                  border: 0.25
+                  align: center
+                  jitter: 0.4
+                  tail_angle: 69
+                  tail_length: 1.7
+                }
+              }
+            }
+          }
+        }
+        row height: 60.3% {
+          row {
+            col width: 66.5% {
+              panel panel_3 {
+                offset_left: 2.9
+                images {
+                  { path: "assets/soseki_2_p4.png" image_fit: cover anchor_pos: top_left x: -8.1mm y: -2.3mm width: 111.88% height: 103.35% }
+                }
+                monologue {
+                  text: "赤ん坊の私は品物の棚に\nぶっきらぼうに並べられていました"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 68.8
+                  y: 153.6
+                  width: 16.4
+                  height: 57.4
+                  margin: 0
+                  background: "#ffffff"
+                  border: 0.25
+                  align: center
+                }
+                balloon {
+                  text: "金之助！"
+                  text_direction: vertical
+                  x: 145.5
+                  y: 162.2
+                  width: 12.5
+                  height: 33.2
+                  margin: 0
+                  align: center
+                  tail_angle: 92.9
+                  tail_length: 0.2
+                }
+              }
+            }
+            col width: 33.5% {
+              panel panel_4 {
+                background: "#000000"
+                images {
+                  { path: "assets/soseki_2_p5.png" anchor_pos: top_left x: 0mm y: 8.21% width: 78.06% height: 91.79% }
+                }
+                monologue {
+                  text: "この時の私を見た姉が不憫に思い\n私を実家へ連れ戻したそうです"
+                  text_direction: vertical
+                  font_size: 3
+                  x: 46.7
+                  y: 154.4
+                  width: 14.6
+                  height: 56.5
+                  margin: 0
+                  background: "#ffffff"
+                  border: 0.25
+                  align: center
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
