@@ -1085,5 +1085,62 @@ Error: Unsupported image format: 'image.bmp'
 
 ---
 
-**MangaDSL Language Reference v1.1**
-Last updated: 2026-06-20
+## 9. CLI Tool: `transpose`
+
+`transpose` is a CLI subcommand (not DSL syntax) that mirrors a `.manga` file
+**left↔right**, converting between right-opening (`rtl`, Japanese manga) and
+left-opening (`ltr`, Western comics) layouts. It rewrites only the attributes
+that carry a left/right meaning and copies everything else verbatim; running it
+twice returns the original (it is an involution).
+
+```bash
+manga-composer transpose <input.manga> [options]
+```
+
+### What it mirrors (by default)
+
+- Page `direction` (`rtl`⇄`ltr`) and `padding_left`⇄`padding_right`
+- `align` (`start`⇄`end`) and `anchor_pos` left↔right (e.g. `top_left`⇄`top_right`)
+- `skew_left`⇄`skew_right` (and sign-flips every skew), `offset_left`⇄`offset_right`,
+  `border_left`⇄`border_right`, `margin_left`⇄`margin_right`
+- `dx` sign-flip, image-layer `flip_h` toggle, balloon `tail_angle`
+- `x` coordinates in `%` (and absolute balloon `x` when `width` is explicit)
+
+Text orientation (`text_direction` vertical⇄horizontal) is **NOT** changed unless
+you pass `--text`. Layout-dependent coordinates that can't be mirrored without a
+full layout pass (auto-width absolute `x`, panel-relative `mm` `x`) are kept as-is
+with a warning.
+
+### Common options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `-o, --output <file>` | stdout | Transposed `.manga` output |
+| `--out-image <file>` | — | Also render the result to a `.png`/`.svg` (one-step visual check) |
+| `--direction <flip\|ltr\|rtl>` | `flip` | Invert, or force a target (no-op if already there) |
+| `--text` | off | Also swap `text_direction` vertical⇄horizontal |
+| `--no-flip-images` / `--no-skew` / `--no-tail` / `--no-align` | (on) | Disable that part of the mirror |
+| `--keep-coords` | off | Don't mirror any `x` coordinates |
+| `--dry-run` | off | Report what would change; write nothing |
+
+Run `manga-composer transpose --help` for the full list. The `-o` source and
+`--out-image` image can be produced together in one command:
+
+```bash
+# Transposed source AND a preview image in one step
+manga-composer transpose in.manga -o out.manga --out-image out.png
+
+# Convert a right-opening book to left-opening, text turned horizontal
+manga-composer transpose book_rtl.manga --text -o book_ltr.manga --out-image book_ltr.png
+```
+
+Without a build, run it straight from the TypeScript source (see README):
+
+```bash
+npx tsx src/cli.ts transpose in.manga -o out.manga --out-image out.png
+```
+
+---
+
+**MangaDSL Language Reference v1.2**
+Last updated: 2026-08-18

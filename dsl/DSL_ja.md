@@ -1092,5 +1092,58 @@ Error: Unsupported image format: 'image.bmp'
 
 ---
 
-**MangaDSL Language Reference v1.0**
-最終更新: 2026-06-20
+## 9. CLI ツール: `transpose`
+
+`transpose` は `.manga` ファイルを**左右反転**する CLI サブコマンド（DSL 構文ではない）です。
+右開き（`rtl`、日本の漫画）と左開き（`ltr`、英語コミック）のレイアウトを相互変換します。
+左右の意味を持つ属性だけを書き換え、それ以外はそのままコピーします。2回実行すると元に戻ります（対合）。
+
+```bash
+manga-composer transpose <input.manga> [options]
+```
+
+### 既定で変換される内容
+
+- ページの `direction`（`rtl`⇄`ltr`）、`padding_left`⇄`padding_right`
+- `align`（`start`⇄`end`）、`anchor_pos` の左右（例: `top_left`⇄`top_right`）
+- `skew_left`⇄`skew_right`（全 skew の符号も反転）、`offset_left`⇄`offset_right`、
+  `border_left`⇄`border_right`、`margin_left`⇄`margin_right`
+- `dx` の符号反転、画像レイヤーの `flip_h` トグル、バルーンの `tail_angle`
+- `%` 指定の `x` 座標（および `width` を明示したバルーンの絶対 `x`）
+
+テキストの縦横（`text_direction` vertical⇄horizontal）は **既定では変換しません**。`--text` を付けたときのみ変換します。
+レイアウトなしでは反転できない座標（幅 auto の絶対 `x`、コマ相対の `mm` 指定 `x`）は、警告を出してそのまま保持します。
+
+### 主なオプション
+
+| オプション | 既定 | 意味 |
+|---|---|---|
+| `-o, --output <file>` | 標準出力 | 変換後 `.manga` の出力先 |
+| `--out-image <file>` | — | 変換結果を `.png`/`.svg` にも出力（動作確認を1ステップで） |
+| `--direction <flip\|ltr\|rtl>` | `flip` | 反転、または目標を明示（既に目標なら何もしない） |
+| `--text` | off | `text_direction` の縦横（vertical⇄horizontal）も変換 |
+| `--no-flip-images` / `--no-skew` / `--no-tail` / `--no-align` | （on） | その変換だけ無効化 |
+| `--keep-coords` | off | `x` 座標のミラーを行わない |
+| `--dry-run` | off | 変換内容を表示するだけで出力しない |
+
+全オプションは `manga-composer transpose --help` を参照。`-o`（ソース）と `--out-image`（画像）は
+1コマンドで同時に出力できます:
+
+```bash
+# 変換後ソースと確認用画像を1ステップで
+manga-composer transpose in.manga -o out.manga --out-image out.png
+
+# 右開きの本を左開きに、テキストも横書きへ
+manga-composer transpose book_rtl.manga --text -o book_ltr.manga --out-image book_ltr.png
+```
+
+ビルドせずに TypeScript ソースから直接実行することもできます（README 参照）:
+
+```bash
+npx tsx src/cli.ts transpose in.manga -o out.manga --out-image out.png
+```
+
+---
+
+**MangaDSL Language Reference v1.1**
+最終更新: 2026-08-18
