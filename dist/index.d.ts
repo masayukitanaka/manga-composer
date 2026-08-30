@@ -18,6 +18,8 @@ export { createNodeImageLoader } from "./renderer/nodeImageLoader.js";
 export type { ImageLoader, LoadedImage } from "./renderer/imageLoader.js";
 export type { Page, PanelNode, RowNode, ColNode, LayoutNode, PanelAttrs, SpeechNode, BalloonNode, MonologueNode, BalloonAttrs, MonologueAttrs, BalloonShape, AnchorPos, } from "./ast.js";
 export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
+export { transposePage, defaultTransposeOptions } from "./transpose.js";
+export type { TransposeOptions, TransposeResult } from "./transpose.js";
 /**
  * Compile .manga source to an SVG string.
  * @param source .manga DSL source text

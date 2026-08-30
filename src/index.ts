@@ -38,6 +38,8 @@ export type {
   AnchorPos,
 } from "./ast.js";
 export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
+export { transposePage, defaultTransposeOptions } from "./transpose.js";
+export type { TransposeOptions, TransposeResult } from "./transpose.js";
 
 /**
  * Compile .manga source to an SVG string.

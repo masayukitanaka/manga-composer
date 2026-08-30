@@ -20,6 +20,7 @@ export { SVGRenderer } from "./renderer/svg.js";
 export { svgToPng } from "./renderer/raster.js";
 export { createNodeImageLoader } from "./renderer/nodeImageLoader.js";
 export { defaultPanelAttrs, defaultBalloonAttrs, defaultMonologueAttrs } from "./ast.js";
+export { transposePage, defaultTransposeOptions } from "./transpose.js";
 /**
  * Compile .manga source to an SVG string.
  * @param source .manga DSL source text
