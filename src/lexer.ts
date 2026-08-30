@@ -5,7 +5,7 @@
  *
  * Terminal reference (grammar.lark), highest priority first:
  *   SIZE_VALUE.3 : /\d+(\.\d+)?x\d+(\.\d+)?(mm|px|pt)?/   e.g. 420x297, 800x600px
- *   PERCENTAGE.2 : /\d+(\.\d+)?%/                          e.g. 40%, 50.5%
+ *   PERCENTAGE.2 : /-?\d+(\.\d+)?%/                         e.g. 40%, 50.5%, -0.79%
  *   STRING.2     : /"([^"\\]|\\.)*"/
  *   NUMBER       : minus-optional digits with optional decimal
  *   UNIT         : "mm" | "px" | "pt"
@@ -30,7 +30,7 @@ import { ParseError } from "./errors.js";
 export type TokenType =
   | "IDENT" // CNAME (includes keywords and bare unit words like mm/px/pt)
   | "NUMBER" // -?\d+(\.\d+)?
-  | "PERCENTAGE" // \d+(\.\d+)?%
+  | "PERCENTAGE" // -?\d+(\.\d+)?%
   | "STRING" // "..."
   | "SIZE_VALUE" // WxH[unit]
   | "LBRACE" // {
@@ -48,7 +48,7 @@ export interface Token {
 }
 
 const RE_SIZE_VALUE = /^\d+(\.\d+)?x\d+(\.\d+)?(mm|px|pt)?/;
-const RE_PERCENTAGE = /^\d+(\.\d+)?%/;
+const RE_PERCENTAGE = /^-?\d+(\.\d+)?%/;
 const RE_NUMBER = /^-?\d+(\.\d+)?/;
 const RE_STRING = /^"([^"\\]|\\.)*"/;
 const RE_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*/;
@@ -148,7 +148,13 @@ export function tokenize(source: string): Token[] {
         advance(mSize[0].length);
         continue;
       }
-      const mPct = ch >= "0" && ch <= "9" ? RE_PERCENTAGE.exec(rest) : null;
+      // `-` is included so a negative percentage lexes as one token. Image-layer
+      // x/dx are panel-relative and legitimately go negative (a layer bleeding
+      // past the panel's left edge), and `transpose` produces exactly that when
+      // it mirrors `x' = 100 − x − width`. Without this the tokenizer split
+      // `-0.79%` into NUMBER(-0.79) + a stray '%' and threw, so transpose could
+      // emit a page its own parser refused to read back.
+      const mPct = ch === "-" || (ch >= "0" && ch <= "9") ? RE_PERCENTAGE.exec(rest) : null;
       if (mPct) {
         tokens.push({ type: "PERCENTAGE", value: mPct[0], line: startLine, col: startCol });
         advance(mPct[0].length);

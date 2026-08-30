@@ -218,3 +218,74 @@ describe("transpose — purity & serialize round-trip", () => {
     expect(JSON.stringify(parse(serialize(parse(out))))).toBe(JSON.stringify(parse(out)));
   });
 });
+
+/**
+ * Round-trip safety: transpose must emit DSL its own parser accepts.
+ *
+ * Mirroring an image layer computes `x' = 100 − x − width`, which goes NEGATIVE
+ * whenever the layer bleeds past the panel's left edge (a full-bleed image
+ * scaled past 100% does exactly this). The grammar has no negative percentage
+ * (lexer RE_PERCENTAGE is /^\d+(\.\d+)?%/), so serializing that as `%` produced
+ * a page that could never be read back — the editor showed nothing at all.
+ */
+describe("transpose の出力は parse し直せる", () => {
+  const bleeding = `page {
+  size: 216x216mm
+  panel p1 {
+    images {
+      { path: "/img/a/b" anchor_pos: top_left x: 0.12% y: -0.4mm width: 100.67% height: 137.83% }
+    }
+  }
+}`;
+
+  it("はみ出した画像レイヤーを反転しても往復できる", () => {
+    const { page } = tp(bleeding);
+    const out = serialize(page);
+    // 変換結果をもう一度読める＝負の % を書き出していない。
+    expect(() => parse(out)).not.toThrow();
+  });
+
+  it("負になる x は % のまま保つ（単位を変えると意味が変わる）", () => {
+    // `%` はパネル幅基準、`mm` は絶対値。パネル幅を知らないまま mm に
+    // 置き換えると画像がずれるので、単位は変えずに文法側で負を許す。
+    const { page } = tp(bleeding);
+    const layer = firstPanel(page).attrs.imageLayers[0];
+    expect(layer.x).not.toBeNull();
+    expect(layer.x!.unit).toBe("%");
+    expect(layer.x!.value).toBeLessThan(0);
+  });
+
+  it("負の % を読み戻すと同じ値になる", () => {
+    const { page } = tp(bleeding);
+    const reparsed = parse(serialize(page));
+    const a = firstPanel(page).attrs.imageLayers[0];
+    const b = firstPanel(reparsed).attrs.imageLayers[0];
+    expect(b.x!.unit).toBe(a.x!.unit);
+    expect(b.x!.value).toBeCloseTo(a.x!.value, 6);
+  });
+
+  it("負にならない場合は % のまま（既存の挙動を変えない）", () => {
+    const inside = `page {
+  size: 216x216mm
+  panel p1 {
+    images { { path: "/img/a/b" x: 10% width: 50% height: 50% } }
+  }
+}`;
+    const { page } = tp(inside);
+    const layer = firstPanel(page).attrs.imageLayers[0];
+    // 100 - 10 - 50 = 40% → 正なので % のまま
+    expect(layer.x!.unit).toBe("%");
+    expect(layer.x!.value).toBeCloseTo(40, 6);
+  });
+
+  it("二回反転すると元に戻る（往復して同じ位置）", () => {
+    const once = tp(bleeding).page;
+    const twice = transposePage(once, defaultTransposeOptions()).page;
+    const a = firstPanel(parse(bleeding)).attrs.imageLayers[0];
+    const b = firstPanel(twice).attrs.imageLayers[0];
+    // 単位が mm に変わっていても、指す位置は同じであること。
+    const toPct = (l: typeof a.x, pageMm: number) =>
+      l!.unit === "%" ? l!.value : (l!.value / pageMm) * 100;
+    expect(toPct(b.x, 216)).toBeCloseTo(toPct(a.x, 216), 4);
+  });
+});

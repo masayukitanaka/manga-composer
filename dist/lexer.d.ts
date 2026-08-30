@@ -5,7 +5,7 @@
  *
  * Terminal reference (grammar.lark), highest priority first:
  *   SIZE_VALUE.3 : /\d+(\.\d+)?x\d+(\.\d+)?(mm|px|pt)?/   e.g. 420x297, 800x600px
- *   PERCENTAGE.2 : /\d+(\.\d+)?%/                          e.g. 40%, 50.5%
+ *   PERCENTAGE.2 : /-?\d+(\.\d+)?%/                         e.g. 40%, 50.5%, -0.79%
  *   STRING.2     : /"([^"\\]|\\.)*"/
  *   NUMBER       : minus-optional digits with optional decimal
  *   UNIT         : "mm" | "px" | "pt"

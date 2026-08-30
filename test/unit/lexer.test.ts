@@ -75,3 +75,31 @@ describe("lexer", () => {
     }
   });
 });
+
+/**
+ * Negative percentages.
+ *
+ * Image-layer x/dx are panel-relative and legitimately go negative (a layer
+ * bleeding past the panel's left edge). `transpose` produces them when it
+ * mirrors `x' = 100 − x − width`. The tokenizer used to split `-0.79%` into
+ * NUMBER + a stray '%' and throw, so a transposed page could not be re-read.
+ */
+describe("負のパーセント", () => {
+  it("-0.79% を 1 トークンとして読む", () => {
+    const toks = tokenize("-0.79%").filter((t) => t.type !== "NEWLINE");
+    expect(toks[0].type).toBe("PERCENTAGE");
+    expect(toks[0].value).toBe("-0.79%");
+  });
+
+  it("正のパーセントは従来どおり", () => {
+    const toks = tokenize("40%").filter((t) => t.type !== "NEWLINE");
+    expect(toks[0].type).toBe("PERCENTAGE");
+    expect(toks[0].value).toBe("40%");
+  });
+
+  it("単位のない負の数は NUMBER のまま", () => {
+    const toks = tokenize("-3.2").filter((t) => t.type !== "NEWLINE");
+    expect(toks[0].type).toBe("NUMBER");
+    expect(toks[0].value).toBe("-3.2");
+  });
+});
