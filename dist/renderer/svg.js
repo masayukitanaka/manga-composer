@@ -855,7 +855,15 @@ export class SVGRenderer {
         // Layer fit, else panel fit, else "cover".
         const fit = layer.imageFit ?? panel.attrs.imageFit ?? "cover";
         const aspect_ratio = IMAGE_FIT_PRESERVE_ASPECT[fit] ?? "xMidYMid slice";
-        const img = parent.sub("image", {
+        // A flipped image needs the clip on a WRAPPER, not on the <image> itself.
+        //
+        // `clip-path` resolves in the element's own coordinate system, so putting it
+        // on the mirrored <image> mirrors the clip too — on a skewed panel the cut
+        // ran the opposite way to the frame, leaving a wedge of blank on one side
+        // and image spilling past the border on the other. Wrapping keeps the clip
+        // in the panel's coordinates while only the image is mirrored inside it.
+        const host = layer.flipH && clip_path !== null ? parent.sub("g", { "clip-path": clip_path }) : parent;
+        const img = host.sub("image", {
             x: s(box.x),
             y: s(box.y),
             width: s(box.w),
@@ -868,7 +876,8 @@ export class SVGRenderer {
             const cx = box.x + box.w / 2;
             img.set("transform", `translate(${s(2 * cx)} 0) scale(-1 1)`);
         }
-        if (clip_path !== null)
+        // Unflipped layers keep the clip directly on the image (no extra wrapper).
+        if (clip_path !== null && host === parent)
             img.set("clip-path", clip_path);
     }
     _render_text(parent, panel) {

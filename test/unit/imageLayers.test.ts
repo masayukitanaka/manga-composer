@@ -470,3 +470,48 @@ describe("image layers — serialize round-trip", () => {
     roundTrip(`page { panel s { images { { path: "a.png" flip_h: true } } } }`);
   });
 });
+
+/**
+ * flip_h とクリップの組み合わせ。
+ *
+ * `clip-path` は要素自身の座標系で解決されるので、鏡像 transform を持つ
+ * <image> に直接付けるとクリップまで反転する。skew したコマでは切れ目が
+ * 枠と逆向きになり、片側に余白・反対側に食み出しが出ていた。
+ * 反転する場合はクリップをラッパー <g> に置き、画像だけを反転させる。
+ */
+describe("flip_h とクリップ", () => {
+  const src = (flip: boolean) => `page { size: 100x100mm
+  panel p1 { skew_bottom: -6
+    images { { path: "/img/a" anchor_pos: top_left x: 0% y: 0mm width: 100% height: 100% flip_h: ${flip} } } } }`;
+
+  const render = (flip: boolean) => {
+    const page = parse(src(flip));
+    const eng = new LayoutEngine(page);
+    const laid = eng.layout();
+    return new SVGRenderer(page, laid, eng.speeches, () => ({
+      mime: "image/png",
+      dataBase64: "AA",
+    })).render();
+  };
+
+  it("反転しないときはクリップを image に直接付ける（従来どおり）", () => {
+    const img = render(false).match(/<image[^>]*>/)![0];
+    expect(img).toContain("clip-path=");
+    expect(img).not.toContain("transform=");
+  });
+
+  it("反転するときはクリップをラッパー <g> に移し、image には付けない", () => {
+    const svg = render(true);
+    // <g clip-path="..."> の直下に <image> が来る。
+    expect(svg).toMatch(/<g clip-path="[^"]*"><image[^>]*>/);
+    const img = svg.match(/<image[^>]*>/)![0];
+    expect(img).toContain("transform=");
+    // image 自身にクリップが残っていると、鏡像と一緒に反転してしまう。
+    expect(img).not.toContain("clip-path=");
+  });
+
+  it("反転してもクリップ形状（枠の polygon）は同じ", () => {
+    const poly = (svg: string) => svg.match(/<clipPath[^>]*><polygon points="([^"]*)"/)?.[1];
+    expect(poly(render(true))).toBe(poly(render(false)));
+  });
+});
